@@ -2,6 +2,8 @@
 
 A web-based utility for tracking inventory, storage, vendors, and active quests in Project Gorgon. Also has a map explorer and a chat watcher (still needs more work).
 
+# **[Launch Tracker](http://kaeus.github.io/KaeusGorgonTools/index.html)**  
+
 ## Features
 
 - 📜 **Quest Browser** - View all active quests organized by location
@@ -18,6 +20,14 @@ A web-based utility for tracking inventory, storage, vendors, and active quests 
   - Shows total value per vault
   - Search by item name or vault
 
+- 🛒 **Vendor Browser** - Track merchant stores and favor-gated buy caps
+  - Shows all merchants with a store service, grouped by region (Serbule and Red Wing Casino pinned first)
+  - Displays your current favor level with each merchant
+  - Shows the gold cap available to sell at your current favor tier
+  - Lists what item categories each merchant buys
+  - Tooltip with full favor tier cap breakdown for each merchant
+  - Gift preferences table (Love/Hate items and favor-per-gift values)
+
 - 🗺️ **Interactive Maps** (maps.html) - Dedicated map viewer with markers
   - View zone maps with NPC locations and landmarks
   - Click-and-drag panning, mouse wheel zoom
@@ -32,11 +42,6 @@ A web-based utility for tracking inventory, storage, vendors, and active quests 
   - Visual highlighting of matching lines
   - Statistics tracking (total lines, matches, last match time)
   - Auto-scrolling chat display with line limit
-
-## Quick Start
-  Navigate to http://kaeus.github.io/KaeusGorgonTools/index.html
-
-## How It Works
 
 ### Data Sources
 

@@ -1203,9 +1203,44 @@
             }
         }
 
+        // Persist the chosen directory handle in IndexedDB so the picker
+        // remembers the location even when the page is opened via file://.
+        async function openHandlesDB() {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open('GorgonTrackerDB', 1);
+                req.onupgradeneeded = (e) => e.target.result.createObjectStore('handles');
+                req.onsuccess = (e) => resolve(e.target.result);
+                req.onerror = (e) => reject(e.target.error);
+            });
+        }
+
+        async function saveDirectoryHandle(handle) {
+            try {
+                const db = await openHandlesDB();
+                const tx = db.transaction('handles', 'readwrite');
+                tx.objectStore('handles').put(handle, 'reportsDir');
+                await new Promise(resolve => { tx.oncomplete = resolve; });
+            } catch (e) { /* non-critical */ }
+        }
+
+        async function getSavedDirectoryHandle() {
+            try {
+                const db = await openHandlesDB();
+                return await new Promise(resolve => {
+                    const req = db.transaction('handles', 'readonly').objectStore('handles').get('reportsDir');
+                    req.onsuccess = (e) => resolve(e.target.result || null);
+                    req.onerror = () => resolve(null);
+                });
+            } catch (e) { return null; }
+        }
+
         async function selectReportsFolder() {
             try {
-                reportsDirectoryHandle = await window.showDirectoryPicker({ id: 'gorgon-reports', mode: 'read' });
+                const savedHandle = await getSavedDirectoryHandle();
+                const pickerOpts = { id: 'gorgon-reports', mode: 'read' };
+                if (savedHandle) pickerOpts.startIn = savedHandle;
+                reportsDirectoryHandle = await window.showDirectoryPicker(pickerOpts);
+                await saveDirectoryHandle(reportsDirectoryHandle);
                 const btn = document.getElementById('selectFolderBtn');
                 btn.textContent = '✓ Folder Selected';
                 btn.style.background = '#d4edda';

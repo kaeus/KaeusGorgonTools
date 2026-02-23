@@ -114,9 +114,42 @@
                 this.chatFileHandle = null;
             }
 
+            async openHandlesDB() {
+                return new Promise((resolve, reject) => {
+                    const req = indexedDB.open('GorgonTrackerDB', 1);
+                    req.onupgradeneeded = (e) => e.target.result.createObjectStore('handles');
+                    req.onsuccess = (e) => resolve(e.target.result);
+                    req.onerror = (e) => reject(e.target.error);
+                });
+            }
+
+            async saveDirectoryHandle(handle) {
+                try {
+                    const db = await this.openHandlesDB();
+                    const tx = db.transaction('handles', 'readwrite');
+                    tx.objectStore('handles').put(handle, 'chatlogsDir');
+                    await new Promise(resolve => { tx.oncomplete = resolve; });
+                } catch (e) { /* non-critical */ }
+            }
+
+            async getSavedDirectoryHandle() {
+                try {
+                    const db = await this.openHandlesDB();
+                    return await new Promise(resolve => {
+                        const req = db.transaction('handles', 'readonly').objectStore('handles').get('chatlogsDir');
+                        req.onsuccess = (e) => resolve(e.target.result || null);
+                        req.onerror = () => resolve(null);
+                    });
+                } catch (e) { return null; }
+            }
+
             async selectChatLogsFolder() {
                 try {
-                    this.chatLogsDirHandle = await window.showDirectoryPicker({ id: 'gorgon-chatlogs', mode: 'read' });
+                    const savedHandle = await this.getSavedDirectoryHandle();
+                    const pickerOpts = { id: 'gorgon-chatlogs', mode: 'read' };
+                    if (savedHandle) pickerOpts.startIn = savedHandle;
+                    this.chatLogsDirHandle = await window.showDirectoryPicker(pickerOpts);
+                    await this.saveDirectoryHandle(this.chatLogsDirHandle);
                     this.chatFileHandle = null; // reset so next poll re-discovers the latest file
                     const btn = document.getElementById('selectChatFolderBtn');
                     btn.textContent = '✓ Folder Selected';
