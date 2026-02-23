@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Gorgon Quest/Inventory Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🗡️ Project Gorgon Quest/Inventory Tracker</h1>
+            <p>Search your Quests, search your Inventory, track Vendor favor/limits</p>
+        </header>
+
+        <div class="nav">
+            <b>Quest/Inventory Tracker</b>
+            <a href="maps.html">Interactive Maps</a>
+            <a href="chat-watcher.html">Chat Watcher</a>
+        </div>
+
+        <div class="file-loader">
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <button id="reloadBtn" style="flex: 1; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 1em;">
+                    🔄 Reload Game Data
+                </button>
+                <button id="selectFolderBtn" onclick="selectReportsFolder()" style="padding: 12px 16px; background: white; color: #667eea; border: 2px solid #667eea; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 1em; white-space: nowrap;">
+                    📂 Select Folder
+                </button>
+            </div>
+            <div style="font-size: 0.8em; color: #6c757d; margin-bottom: 10px;">
+                Reports folder: <code style="background: #f0f0f0; padding: 1px 5px; border-radius: 3px;">%LocalAppData%Low\Elder Game\Project Gorgon\Reports</code>
+            </div>
+            <details style="margin-top: 10px;">
+                <summary style="cursor: pointer; padding: 10px; background: #f8f9fa; border-radius: 6px; font-weight: 600;">Manual File Loading</summary>
+                <div style="padding: 15px 0;">
+                    <div class="file-input-group">
+                        <label for="characterFile">Character Data:</label>
+                        <input type="file" id="characterFile" accept=".json">
+                    </div>
+                    <div class="file-input-group">
+                        <label for="itemsFile">Items Data:</label>
+                        <input type="file" id="itemsFile" accept=".json">
+                    </div>
+                </div>
+            </details>
+            <div id="status" class="status"></div>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" data-tab="quests">📜 Quests</div>
+            <div class="tab" data-tab="inventory">🎒 Inventory</div>
+            <div class="tab" data-tab="stores">🛒 Vendors</div>
+        </div>
+
+        <div id="quests" class="tab-content active quest-browser">
+            <div id="questStats" class="quest-stats" style="display: none;">
+                <div class="stat-card">
+                    <div class="number" id="totalQuests">0</div>
+                    <div class="label">Active Quests</div>
+                </div>
+                <div class="stat-card">
+                    <div class="number" id="characterLevel">0</div>
+                    <div class="label">Character Level</div>
+                </div>
+                <div class="stat-card">
+                    <div class="number" id="goldAmount">0</div>
+                    <div class="label">Gold</div>
+                </div>
+            </div>
+
+            <div id="questSearchBar" class="search-bar" style="display: none;">
+                <input type="text" id="questSearch" placeholder="🔍 Search quests by name, NPC, or description...">
+            </div>
+
+            <div id="questList" class="quest-list"></div>
+        </div>
+
+        <div id="inventory" class="tab-content inventory-browser">
+            <div id="inventoryStats" class="quest-stats" style="display: none;">
+                <div class="stat-card">
+                    <div class="number" id="totalItems">0</div>
+                    <div class="label">Total Items</div>
+                </div>
+                <div class="stat-card">
+                    <div class="number" id="totalValue">0</div>
+                    <div class="label">Total Value</div>
+                </div>
+                <div class="stat-card">
+                    <div class="number" id="vaultCount">0</div>
+                    <div class="label">Storage Vaults</div>
+                </div>
+            </div>
+
+            <div id="inventorySearchBar" class="search-bar" style="display: none;">
+                <input type="text" id="inventorySearch" placeholder="🔍 Search items by name...">
+            </div>
+
+            <div id="inventoryList" class="quest-list"></div>
+        </div>
+
+        <div id="stores" class="tab-content stores-browser">
+            <div id="storeList"></div>
+        </div>
+    </div>
+
+    <script>
+        // Data Loader
+        class DataLoader {
+            constructor() {
+                this.characterData = null;
+                this.itemsData = null;
+                this.questsData = null;
+                this.npcsData = null;
+                this.cdnItemsData = null;
+                this.storageVaultsData = null;
+                this.cdnBaseUrl = 'https://cdn.projectgorgon.com/v457/data/';
+            }
+
+            async loadCharacterFromAPI() {
+                const response = await fetch('/api/character');
+                if (!response.ok) {
+                    throw new Error(`Failed to load character data: ${response.statusText}`);
+                }
+                this.characterData = await response.json();
+                return this.characterData;
+            }
+
+            async loadCharacterFile(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            this.characterData = JSON.parse(e.target.result);
+                            resolve(this.characterData);
+                        } catch (error) {
+                            reject(new Error('Invalid JSON file'));
+                        }
+                    };
+                    reader.onerror = () => reject(new Error('Failed to read file'));
+                    reader.readAsText(file);
+                });
+            }
+
+            async fetchCDNData(filename) {
+                const url = this.cdnBaseUrl + filename;
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch ${filename}`);
+                }
+                return await response.json();
+            }
+
+            async loadQuestData() {
+                // Check in-memory cache first
+                if (this.questsData && this.npcsData) {
+                    return; // Already loaded in this session
+                }
+
+                // Fetch from CDN
+                const [questsRaw, npcsRaw] = await Promise.all([
+                    this.fetchCDNData('quests.json'),
+                    this.fetchCDNData('npcs.json')
+                ]);
+
+                // Process quests into keyed lookup by InternalName
+                this.questsData = this.processToKeyedLookup(questsRaw, 'InternalName');
+
+                // Process NPCs into keyed lookup (they might use a different key)
+                this.npcsData = this.processToKeyedLookup(npcsRaw, 'InternalName') || npcsRaw;
+            }
+
+            processToKeyedLookup(data, keyField) {
+                // If already an object (not array), check if it needs processing
+                if (!Array.isArray(data)) {
+                    // Check if it's already keyed properly
+                    const firstKey = Object.keys(data)[0];
+                    if (firstKey && data[firstKey] && data[firstKey][keyField] === firstKey) {
+                        return data; // Already properly keyed
+                    }
+                    // If it's an object with values that have the keyField, rekey it
+                    const result = {};
+                    for (const value of Object.values(data)) {
+                        if (value && value[keyField]) {
+                            result[value[keyField]] = value;
+                        }
+                    }
+                    return Object.keys(result).length > 0 ? result : data;
+                }
+
+                // Process array into keyed object
+                const result = {};
+                for (const item of data) {
+                    if (item && item[keyField]) {
+                        result[item[keyField]] = item;
+                    }
+                }
+                return result;
+            }
+
+            getQuestDetails(internalName) {
+                if (!this.questsData || !this.questsData[internalName]) {
+                    return {
+                        InternalName: internalName,
+                        Name: internalName,
+                        Description: 'Quest details not found',
+                        Objectives: [],
+                        IsCategoryGate: false
+                    };
+                }
+                return this.questsData[internalName];
+            }
+
+            getNPCName(npcId) {
+                // Regex replace to sanitize the prefix before the NPC name, for example: AreaEltibule/NPC_Mythander -> NPC_Mythander
+                npcId = (npcId || '').replace(/^[^/]*\//, '').trim();
+
+                if (!this.npcsData || !this.npcsData[npcId]) {
+                    return null;
+                }
+                return this.npcsData[npcId].Name || npcId;
+            }
+
+            async loadItemsFromAPI() {
+                const response = await fetch('/api/items');
+                if (!response.ok) {
+                    throw new Error(`Failed to load items data: ${response.statusText}`);
+                }
+                this.itemsData = await response.json();
+                return this.itemsData;
+            }
+
+            async resolveReportsDir(dirHandle) {
+                // Check if this dir contains a Character_*.json file
+                const hasCharFile = await (async () => {
+                    for await (const [name, handle] of dirHandle.entries()) {
+                        if (handle.kind === 'file' && name.startsWith('Character_') && name.endsWith('.json')) return true;
+                    }
+                    return false;
+                })();
+                if (hasCharFile) return dirHandle;
+
+                // Try navigating into a Reports subdirectory
+                try {
+                    return await dirHandle.getDirectoryHandle('Reports');
+                } catch (_) {
+                    throw new Error('No Character_*.json found. Select the Reports folder (or its parent Project Gorgon folder).');
+                }
+            }
+
+            async loadCharacterFromDirectory(dirHandle) {
+                const reportsDir = await this.resolveReportsDir(dirHandle);
+                this._reportsDir = reportsDir;
+
+                // Find the most recently modified Character_*.json
+                let latestHandle = null, latestMtime = 0;
+                for await (const [name, handle] of reportsDir.entries()) {
+                    if (handle.kind === 'file' && name.startsWith('Character_') && name.endsWith('.json')) {
+                        const f = await handle.getFile();
+                        if (f.lastModified > latestMtime) {
+                            latestMtime = f.lastModified;
+                            latestHandle = handle;
+                            this._charFileBaseName = name.replace(/^Character_/, '').replace(/\.json$/, '');
+                        }
+                    }
+                }
+                if (!latestHandle) throw new Error('No Character_*.json found in selected folder');
+                const file = await latestHandle.getFile();
+                this.characterData = JSON.parse(await file.text());
+                return this.characterData;
+            }
+
+            async loadItemsFromDirectory(dirHandle) {
+                const reportsDir = this._reportsDir || await this.resolveReportsDir(dirHandle);
+                // Use character base name (e.g. "Kaeus_SomeServer") derived from the character file
+                const charBase = this._charFileBaseName || '';
+                let latestHandle = null, latestName = '';
+                for await (const [name, handle] of reportsDir.entries()) {
+                    if (handle.kind === 'file' && name.endsWith('.json') &&
+                        name.includes('_items_') &&
+                        (charBase ? name.startsWith(charBase + '_items_') : true) &&
+                        name > latestName) {
+                        latestName = name;
+                        latestHandle = handle;
+                    }
+                }
+                if (!latestHandle) throw new Error('No *_items_*.json found in selected folder');
+                const file = await latestHandle.getFile();
+                this.itemsData = JSON.parse(await file.text());
+                return this.itemsData;
+            }
+
+            async loadItemsFile(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            this.itemsData = JSON.parse(e.target.result);
+                            resolve(this.itemsData);
+                        } catch (error) {
+                            reject(new Error('Invalid JSON file'));
+                        }
+                    };
+                    reader.onerror = () => reject(new Error('Failed to read file'));
+                    reader.readAsText(file);
+                });
+            }
+
+            async loadInventoryData() {
+                // Check in-memory cache first
+                if (this.cdnItemsData && this.storageVaultsData) {
+                    return; // Already loaded in this session
+                }
+
+                // Fetch from CDN
+                const [itemsRaw, vaultsRaw] = await Promise.all([
+                    this.fetchCDNData('items.json'),
+                    this.fetchCDNData('storagevaults.json')
+                ]);
+
+                // Process into keyed lookups
+                this.cdnItemsData = this.processToKeyedLookup(itemsRaw, 'InternalName');
+                this.storageVaultsData = this.processToKeyedLookup(vaultsRaw, 'InternalName') || vaultsRaw;
+            }
+
+            getItemDetails(typeId) {
+                if (!this.cdnItemsData) return null;
+
+                // CDN items might be keyed by numeric ID or InternalName
+                // Try direct lookup first
+                let item = this.cdnItemsData[typeId];
+                if (item) return item;
+
+                // Search by Id field
+                for (const itemData of Object.values(this.cdnItemsData)) {
+                    if (itemData.Id === typeId) {
+                        return itemData;
+                    }
+                }
+                return null;
+            }
+
+            getVaultName(internalName) {
+                if (!this.storageVaultsData || !this.storageVaultsData[internalName]) {
+                    return internalName || 'Inventory';
+                }
+                return this.storageVaultsData[internalName].Name || internalName;
+            }
+        }
+
+        // Quest Browser
+        class QuestBrowser {
+            constructor(dataLoader) {
+                this.dataLoader = dataLoader;
+                this.allQuests = [];
+                this.filteredQuests = [];
+            }
+
+            async initialize() {
+                if (!this.dataLoader.characterData || !this.dataLoader.questsData) {
+                    return;
+                }
+
+                // Build quest list with details
+                this.allQuests = this.dataLoader.characterData.ActiveQuests.map(internalName => {
+                    const questData = this.dataLoader.getQuestDetails(internalName);
+                    const npcName = this.dataLoader.getNPCName(questData.FavorNpc);
+
+                    return {
+                        internalName,
+                        ...questData,
+                        npcName
+                    };
+                });
+
+                this.filteredQuests = [...this.allQuests];
+                this.render();
+                this.updateStats();
+            }
+
+            updateStats() {
+                const characterData = this.dataLoader.characterData;
+
+                document.getElementById('totalQuests').textContent = this.allQuests.length;
+                document.getElementById('characterLevel').textContent = this.calculateAverageLevel();
+                document.getElementById('goldAmount').textContent = characterData.Currencies.GOLD.toLocaleString();
+
+                document.getElementById('questStats').style.display = 'grid';
+                document.getElementById('questSearchBar').style.display = 'block';
+            }
+
+            calculateAverageLevel() {
+                const skills = this.dataLoader.characterData.Skills;
+                const skillLevels = Object.values(skills)
+                    .filter(skill => skill.Level > 0)
+                    .map(skill => skill.Level);
+
+                if (skillLevels.length === 0) return 0;
+
+                const avg = skillLevels.reduce((a, b) => a + b, 0) / skillLevels.length;
+                return Math.round(avg);
+            }
+
+            search(query) {
+                const lowerQuery = query.toLowerCase();
+                this.filteredQuests = this.allQuests.filter(quest => {
+                    // Search in basic fields
+                    if (quest.Name?.toLowerCase().includes(lowerQuery) ||
+                        quest.Description?.toLowerCase().includes(lowerQuery) ||
+                        quest.npcName?.toLowerCase().includes(lowerQuery) ||
+                        quest.FavorNpc?.toLowerCase().includes(lowerQuery) ||
+                        quest.internalName?.toLowerCase().includes(lowerQuery)) {
+                        return true;
+                    }
+
+                    // Search in objectives
+                    if (quest.Objectives && Array.isArray(quest.Objectives)) {
+                        for (const obj of quest.Objectives) {
+                            const objText = typeof obj === 'string' ? obj : JSON.stringify(obj);
+                            if (objText.toLowerCase().includes(lowerQuery)) {
+                                return true;
+                            }
+                        }
+                    }
+
+                    return false;
+                });
+                this.render();
+            }
+
+            buildQuickObjectives() {
+                const objectivesByZone = {};
+
+                for (const quest of this.filteredQuests) {
+                    const zone = quest.DisplayedLocation || 'Unknown Location';
+                    if (!objectivesByZone[zone]) {
+                        objectivesByZone[zone] = [];
+                    }
+
+                    if (quest.Objectives && Array.isArray(quest.Objectives)) {
+                        for (const objective of quest.Objectives) {
+                            const objText = objective.Description || (typeof objective === 'string' ? objective : JSON.stringify(objective));
+
+                            // Filter out "Talk to" or "Return to" objectives (turn-in objectives)
+                            if (!(objText).match(/^(Talk to|Return to|Speak with|Speak to)/i)) {
+                                objectivesByZone[zone].push({
+                                    text: objText,
+                                    questName: quest.Name
+                                });
+                            }
+                        }
+                    }
+                }
+
+                return objectivesByZone;
+            }
+
+            renderQuickObjectives() {
+                const objectivesByZone = this.buildQuickObjectives();
+                const zones = Object.keys(objectivesByZone).sort();
+
+                if (zones.length === 0) {
+                    return '';
+                }
+
+                const zonesHTML = zones.map((zone, index) => {
+                    const objectives = objectivesByZone[zone];
+                    if (objectives.length === 0) return '';
+
+                    const zoneId = `quick-zone-${zone.replace(/\s+/g, '-').toLowerCase()}`;
+
+                    return `
+                        <div class="quick-objectives-zone">
+                            <div class="quick-objectives-zone-header" data-zone="${zoneId}">
+                                <div class="quick-objectives-zone-title">
+                                    <span>📍 ${zone}</span>
+                                    <span class="quest-count-badge">${objectives.length}</span>
+                                </div>
+                                <div class="accordion-icon">▼</div>
+                            </div>
+                            <div id="${zoneId}" class="quick-objectives-zone-content">
+                                <ul class="quick-objectives-list">
+                                    ${objectives.map(obj => {
+                                        const wikiSearchUrl = `https://wiki.projectgorgon.com/wiki/?search=${encodeURIComponent(obj.questName)}`;
+                                        return `
+                                            <li class="quick-objective-item">
+                                                <span class="quick-objective-text">${obj.text}</span>
+                                                <span class="quick-objective-quest"><a href="${wikiSearchUrl}" target="_blank" rel="noopener noreferrer">${obj.questName}</a></span>
+                                            </li>
+                                        `;
+                                    }).join('')}
+                                </ul>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                return `
+                    <div class="quick-objectives-section">
+                        <div class="quick-objectives-header" id="quickObjectivesToggle">
+                            <div class="quick-objectives-title">
+                                <span>⚡ Quick Objectives</span>
+                                <span class="quest-count-badge">${Object.values(objectivesByZone).flat().length} objectives</span>
+                            </div>
+                            <div class="accordion-icon">▼</div>
+                        </div>
+                        <div class="quick-objectives-content active" id="quickObjectivesContent">
+                            ${zonesHTML}
+                        </div>
+                    </div>
+                `;
+            }
+
+            render() {
+                const container = document.getElementById('questList');
+
+                if (this.filteredQuests.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📜</div>
+                            <h3>No quests found</h3>
+                            <p>Try adjusting your search or load character data.</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Build quick objectives section
+                const quickObjectivesHTML = this.renderQuickObjectives();
+
+                // Group quests by DisplayedLocation
+                const groupedQuests = this.groupByLocation(this.filteredQuests);
+
+                // Render quick objectives + accordions for each location
+                container.innerHTML = quickObjectivesHTML + Object.entries(groupedQuests)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([location, quests]) => this.renderLocationAccordion(location, quests))
+                    .join('');
+
+                // Add click handlers for accordions
+                this.attachAccordionHandlers();
+            }
+
+            groupByLocation(quests) {
+                const grouped = {};
+                for (const quest of quests) {
+                    const location = quest.DisplayedLocation || 'Unknown Location';
+                    if (!grouped[location]) {
+                        grouped[location] = [];
+                    }
+                    grouped[location].push(quest);
+                }
+                return grouped;
+            }
+
+            renderLocationAccordion(location, quests) {
+                const accordionId = `accordion-${location.replace(/\s+/g, '-').toLowerCase()}`;
+                return `
+                    <div class="location-accordion">
+                        <div class="accordion-header" data-accordion="${accordionId}">
+                            <div class="accordion-title">
+                                <span>📍 ${location}</span>
+                                <span class="quest-count-badge">${quests.length} quest${quests.length !== 1 ? 's' : ''}</span>
+                            </div>
+                            <div class="accordion-icon">▼</div>
+                        </div>
+                        <div id="${accordionId}" class="accordion-content">
+                            <div class="accordion-quests">
+                                ${quests.map(quest => this.renderQuestCard(quest)).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            attachAccordionHandlers() {
+                const container = document.getElementById('questList');
+
+                // Handle quest accordion headers
+                const headers = container.querySelectorAll('.accordion-header');
+                headers.forEach(header => {
+                    header.addEventListener('click', () => {
+                        const accordionId = header.getAttribute('data-accordion');
+                        const content = document.getElementById(accordionId);
+
+                        // Toggle active state
+                        header.classList.toggle('active');
+                        content.classList.toggle('active');
+                    });
+                });
+
+                // Handle quick objectives toggle
+                const quickObjToggle = document.getElementById('quickObjectivesToggle');
+                if (quickObjToggle) {
+                    quickObjToggle.addEventListener('click', () => {
+                        const content = document.getElementById('quickObjectivesContent');
+                        quickObjToggle.classList.toggle('active');
+                        content.classList.toggle('active');
+                    });
+                }
+
+                // Handle quick objectives zone toggles
+                const zoneHeaders = container.querySelectorAll('.quick-objectives-zone-header');
+                zoneHeaders.forEach(header => {
+                    header.addEventListener('click', () => {
+                        const zoneId = header.getAttribute('data-zone');
+                        const content = document.getElementById(zoneId);
+                        header.classList.toggle('active');
+                        content.classList.toggle('active');
+                    });
+                });
+            }
+
+            renderQuestCard(quest) {
+                const objectives = quest.Objectives || [];
+                const rewards = this.formatRewards(quest);
+                const level = quest.Level || quest.MidLevel || '?';
+                const questName = quest.Name || quest.internalName;
+                const wikiSearchUrl = `https://wiki.projectgorgon.com/wiki/?search=${encodeURIComponent(questName)}`;
+
+                return `
+                    <div class="quest-card">
+                        <div class="quest-header">
+                            <div>
+                                <div class="quest-title"><a href="${wikiSearchUrl}" target="_blank" rel="noopener noreferrer">${questName}</a></div>
+                                ${quest.npcName ? `<div class="quest-npc">📍 ${quest.npcName}</div>` : ''}
+                            </div>
+                            ${quest.Reward_Favor ? `<div class="quest-level">${quest.Reward_Favor}fv</div>` : ''}
+                        </div>
+
+                        ${quest.Description ? `<div class="quest-description">${quest.Description}</div>` : ''}
+
+                        ${objectives.length > 0 ? `
+                            <div class="quest-objectives">
+                                <h4>Objectives</h4>
+                                <ul>
+                                    ${objectives.map(obj => `
+                                        <li>${this.formatObjective(obj)}</li>
+                                    `).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+
+                        ${rewards.length > 0 ? `
+                            <div class="quest-rewards">
+                                ${rewards.map(reward => `<div class="reward-item">${reward}</div>`).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+
+            formatObjective(objective) {
+                if (typeof objective === 'string') return objective;
+                if (objective.Description) return objective.Description;
+                if (objective.Type) {
+                    let text = objective.Type;
+                    if (objective.Target) text += `: ${objective.Target}`;
+                    if (objective.Number) text += ` (${objective.Number})`;
+                    return text;
+                }
+                return JSON.stringify(objective);
+            }
+
+            formatRewards(quest) {
+                const rewards = [];
+
+                if (quest.Rewards_Gold) {
+                    rewards.push(`💰 ${quest.Rewards_Gold} Gold`);
+                }
+
+                if (quest.Rewards_Favor) {
+                    rewards.push(`⭐ ${quest.Rewards_Favor} Favor`);
+                }
+
+                if (quest.Rewards_XP) {
+                    rewards.push(`📈 ${quest.Rewards_XP} XP`);
+                }
+
+                if (quest.Rewards_Items && quest.Rewards_Items.length > 0) {
+                    rewards.push(`🎁 ${quest.Rewards_Items.length} Item(s)`);
+                }
+
+                return rewards;
+            }
+        }
+
+        // Inventory Browser
+        class InventoryBrowser {
+            constructor(dataLoader) {
+                this.dataLoader = dataLoader;
+                this.allItems = [];
+                this.filteredItems = [];
+            }
+
+            async initialize() {
+                if (!this.dataLoader.itemsData || !this.dataLoader.cdnItemsData) {
+                    return;
+                }
+
+                // Build item list with details
+                this.allItems = this.dataLoader.itemsData.Items.map(item => {
+                    const itemDetails = this.dataLoader.getItemDetails(item.TypeID);
+                    const vaultName = this.dataLoader.getVaultName(item.StorageVault);
+
+                    return {
+                        ...item,
+                        details: itemDetails,
+                        vaultName
+                    };
+                });
+
+                this.filteredItems = [...this.allItems];
+                this.render();
+                this.updateStats();
+            }
+
+            updateStats() {
+                const totalItems = this.allItems.reduce((sum, item) => sum + 1, 0);
+                const totalValue = this.allItems.reduce((sum, item) => sum + ((item.Value || 0) * (item.StackSize || 1)), 0);
+                const vaultCount = new Set(this.allItems.map(item => item.StorageVault)).size;
+
+                document.getElementById('totalItems').textContent = totalItems.toLocaleString();
+                document.getElementById('totalValue').textContent = totalValue.toLocaleString() + 'g';
+                document.getElementById('vaultCount').textContent = vaultCount;
+
+                document.getElementById('inventoryStats').style.display = 'grid';
+                document.getElementById('inventorySearchBar').style.display = 'block';
+            }
+
+            search(query) {
+                const lowerQuery = query.toLowerCase();
+                this.filteredItems = this.allItems.filter(item => {
+                    return (
+                        item.Name?.toLowerCase().includes(lowerQuery) ||
+                        item.vaultName?.toLowerCase().includes(lowerQuery) ||
+                        item.details?.Name?.toLowerCase().includes(lowerQuery)
+                    );
+                });
+                this.render();
+            }
+
+            render() {
+                const container = document.getElementById('inventoryList');
+
+                if (this.filteredItems.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">🎒</div>
+                            <h3>No items found</h3>
+                            <p>Try adjusting your search or load items data.</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Group items by StorageVault
+                const groupedItems = this.groupByVault(this.filteredItems);
+
+                // Render accordions for each vault
+                container.innerHTML = Object.entries(groupedItems)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([vault, items]) => this.renderVaultAccordion(vault, items))
+                    .join('');
+
+                // Add click handlers for accordions
+                this.attachAccordionHandlers();
+            }
+
+            groupByVault(items) {
+                const grouped = {};
+                for (const item of items) {
+                    const vault = item.vaultName || 'Unknown Vault';
+                    if (!grouped[vault]) {
+                        grouped[vault] = [];
+                    }
+                    grouped[vault].push(item);
+                }
+                return grouped;
+            }
+
+            renderVaultAccordion(vault, items) {
+                const accordionId = `vault-${vault.replace(/\s+/g, '-').toLowerCase()}`;
+                const totalValue = items.reduce((sum, item) => sum + ((item.Value || 0) * (item.StackSize || 1)), 0);
+                const totalCount = items.reduce((sum, item) => sum + 1, 0);
+
+                // Sort items by total value (descending)
+                const sortedItems = [...items].sort((a, b) => {
+                    const aTotal = (a.Value || 0) * (a.StackSize || 1);
+                    const bTotal = (b.Value || 0) * (b.StackSize || 1);
+                    return bTotal - aTotal;
+                });
+
+                return `
+                    <div class="location-accordion">
+                        <div class="accordion-header" data-accordion="${accordionId}">
+                            <div class="accordion-title">
+                                <span>🗄️ ${vault}</span>
+                                <span class="quest-count-badge">${totalCount} items</span>
+                            </div>
+                            <div class="accordion-icon">▼</div>
+                        </div>
+                        <div id="${accordionId}" class="accordion-content">
+                            <div class="accordion-quests">
+                                ${sortedItems.map(item => this.renderItemCard(item)).join('')}
+                                <div class="vault-summary">
+                                    <span class="vault-summary-label">Total Value:</span>
+                                    <span class="vault-summary-value">💰 ${totalValue.toLocaleString()}g</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            renderItemCard(item) {
+                const perItemValue = item.Value || 0;
+                const totalValue = perItemValue * (item.StackSize || 1);
+
+                // Determine rarity class
+                const rarity = item.Rarity || '';
+                const rarityClass = rarity ? `rarity-${rarity.toLowerCase()}` : '';
+
+                // Build details badges
+                const detailBadges = [];
+
+                if (rarity) {
+                    detailBadges.push(`<span class="item-detail-badge">${rarity}</span>`);
+                }
+
+                if (item.RequiredLevel || item.Level) {
+                    const level = item.RequiredLevel || item.Level;
+                    detailBadges.push(`<span class="item-detail-badge">Lvl ${level}</span>`);
+                }
+
+                if (item.EquipSlot || item.Slot) {
+                    const slot = item.EquipSlot || item.Slot;
+                    detailBadges.push(`<span class="item-detail-badge">${slot}</span>`);
+                }
+
+                return `
+                    <div class="item-card ${rarityClass}">
+                        <div class="item-header">
+                            <div class="item-name">${item.Name || 'Unknown Item'}</div>
+                            ${item.StackSize > 1 ? `<span class="item-stack">×${item.StackSize}</span>` : ''}
+                        </div>
+                        <div class="item-value">
+                            💰 ${totalValue.toLocaleString()}g
+                            ${item.StackSize > 1 ? ` (${perItemValue.toFixed(1)}g each)` : ''}
+                        </div>
+                        ${detailBadges.length > 0 ? `
+                            <div class="item-details">
+                                ${detailBadges.join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+
+            attachAccordionHandlers() {
+                const container = document.getElementById('inventoryList');
+                const headers = container.querySelectorAll('.accordion-header');
+                headers.forEach(header => {
+                    header.addEventListener('click', () => {
+                        const accordionId = header.getAttribute('data-accordion');
+                        const content = document.getElementById(accordionId);
+
+                        // Toggle active state
+                        header.classList.toggle('active');
+                        content.classList.toggle('active');
+                    });
+                });
+            }
+        }
+
+        // Regions to pin to the top of the Stores list (in order), rest sort alphabetically
+        const STORE_PINNED_REGIONS = ['Serbule', 'Red Wing Casino'];
+
+        // Store Browser
+        class StoreBrowser {
+            constructor(dataLoader) {
+                this.dataLoader = dataLoader;
+                this.storeNPCs = [];
+
+                // Canonical favor level ordering (low → high)
+                this.FAVOR_ORDER = [
+                    'Despised', 'Disliked', 'Neutral', 'Comfortable',
+                    'Friends', 'CloseFriends', 'BestFriends', 'LikeFamily', 'SoulMates'
+                ];
+            }
+
+            initialize() {
+                if (!this.dataLoader.npcsData) return;
+
+                this.storeNPCs = [];
+
+                for (const [key, npc] of Object.entries(this.dataLoader.npcsData)) {
+                    if (!npc.Services || !Array.isArray(npc.Services)) continue;
+
+                    const storeService = npc.Services.find(s => s.Type === 'Store');
+                    if (!storeService) continue;
+                    if (!storeService.CapIncreases || storeService.CapIncreases.length === 0) continue;
+                    // Skip vendors with no buy categories (entries only have level:value, not level:value:types)
+                    const hasBuyTypes = storeService.CapIncreases.some(line => (line.match(/:/g) || []).length >= 2);
+                    if (!hasBuyTypes) continue;
+
+                    // Match character favor level — character stores NPC keys like "NPC_CharlesThompson"
+                    const charNPC = this.dataLoader.characterData?.NPCs?.[key];
+                    const favorLevel = charNPC?.FavorLevel || null;
+
+                    this.storeNPCs.push({
+                        key,
+                        npc,
+                        storeService,
+                        favorLevel,
+                        area: npc.AreaFriendlyName || npc.AreaName || 'Unknown Region'
+                    });
+                }
+
+                this.render();
+            }
+
+            render() {
+                const container = document.getElementById('storeList');
+
+                if (this.storeNPCs.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">🛒</div>
+                            <h3>No store data loaded</h3>
+                            <p>Load character data to see merchant stores.</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Group by region
+                const byRegion = {};
+                for (const entry of this.storeNPCs) {
+                    const region = entry.area;
+                    if (!byRegion[region]) byRegion[region] = [];
+                    byRegion[region].push(entry);
+                }
+
+                container.innerHTML = Object.entries(byRegion)
+                    .sort(([a], [b]) => {
+                        const aPin = STORE_PINNED_REGIONS.indexOf(a);
+                        const bPin = STORE_PINNED_REGIONS.indexOf(b);
+                        if (aPin !== -1 && bPin !== -1) return aPin - bPin;
+                        if (aPin !== -1) return -1;
+                        if (bPin !== -1) return 1;
+                        return a.localeCompare(b);
+                    })
+                    .map(([region, npcs]) => this.renderRegionAccordion(region, npcs))
+                    .join('');
+
+                this.attachHandlers();
+            }
+
+            renderRegionAccordion(region, npcs) {
+                const accordionId = `store-region-${region.replace(/\W+/g, '-').toLowerCase()}`;
+                // Sort NPCs alphabetically within each region
+                const sorted = [...npcs].sort((a, b) => (a.npc.Name || a.key).localeCompare(b.npc.Name || b.key));
+
+                return `
+                    <div class="location-accordion">
+                        <div class="accordion-header" data-accordion="${accordionId}">
+                            <div class="accordion-title">
+                                <span>📍 ${region}</span>
+                                <span class="quest-count-badge">${npcs.length} merchant${npcs.length !== 1 ? 's' : ''}</span>
+                            </div>
+                            <div class="accordion-icon">▼</div>
+                        </div>
+                        <div id="${accordionId}" class="accordion-content">
+                            <div class="stores-region-npcs">
+                                <table class="store-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Merchant</th>
+                                            <th>Favor</th>
+                                            <th>Cap</th>
+                                            <th>Buys</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${sorted.map(entry => this.renderNPCCard(entry)).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            parseCaps(storeService) {
+                return (storeService.CapIncreases || []).map(line => {
+                    const colonIdx = line.indexOf(':');
+                    const secondColonIdx = line.indexOf(':', colonIdx + 1);
+                    const fLevel = line.substring(0, colonIdx);
+                    const cap = parseInt(line.substring(colonIdx + 1, secondColonIdx)) || 0;
+                    const buyTypes = secondColonIdx >= 0 ? line.substring(secondColonIdx + 1).split(',') : [];
+                    return { favorLevel: fLevel, cap, buyTypes };
+                });
+            }
+
+            renderNPCCard(entry) {
+                const { key, npc, storeService, favorLevel } = entry;
+                const name = npc.Name || key;
+
+                // Parse and strip Despised rows
+                const parsedCaps = this.parseCaps(storeService).filter(p => p.favorLevel !== 'Despised');
+
+                // Find current cap entry
+                const currentCap = favorLevel ? parsedCaps.find(p => p.favorLevel === favorLevel) : null;
+                const capText = currentCap ? `💰 ${currentCap.cap.toLocaleString()}g` : '—';
+                const capClass = currentCap ? '' : 'no-cap';
+
+                // Buy types: use first entry at Friends or above, fallback to first available
+                const friendsIdx = this.FAVOR_ORDER.indexOf('Friends');
+                const refCap = parsedCaps.find(p => this.FAVOR_ORDER.indexOf(p.favorLevel) >= friendsIdx) || parsedCaps[0];
+                const buysText = refCap ? refCap.buyTypes.join(', ') : '';
+
+                const favorBadgeHtml = favorLevel
+                    ? `<span class="favor-badge favor-${favorLevel.toLowerCase()}">${favorLevel}</span>`
+                    : `<span class="favor-badge favor-unknown">Not Met</span>`;
+
+                return `
+                    <tr>
+                        <td class="col-name"><a href="https://wiki.projectgorgon.com/wiki/?search=${encodeURIComponent(name)}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none;" onmouseover="this.style.color='#667eea';this.style.textDecoration='underline'" onmouseout="this.style.color='inherit';this.style.textDecoration='none'">${name}</a></td>
+                        <td class="col-favor">${favorBadgeHtml}</td>
+                        <td class="col-cap ${capClass}">${capText}</td>
+                        <td class="col-buys">${buysText}</td>
+                        <td class="col-tooltip">
+                            <div class="tooltip-container">
+                                <button class="tooltip-btn">?</button>
+                                <div class="tooltip-content">
+                                    <div class="tooltip-title">All Favor Tiers</div>
+                                    ${this.renderCapTable(parsedCaps, favorLevel)}
+                                    ${npc.Preferences && npc.Preferences.length > 0 ? `
+                                        <div class="tooltip-title tooltip-title-divider">Gift Preferences</div>
+                                        ${this.renderPreferencesTable(npc.Preferences)}
+                                    ` : ''}
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }
+
+            renderCapTable(parsedCaps, currentFavorLevel) {
+                if (parsedCaps.length === 0) {
+                    return '<p style="padding: 12px; color: #6c757d; font-size: 0.9em;">No cap data available.</p>';
+                }
+
+                const currentFavorIndex = this.FAVOR_ORDER.indexOf(currentFavorLevel);
+
+                const rows = parsedCaps.map(cap => {
+                    const capFavorIndex = this.FAVOR_ORDER.indexOf(cap.favorLevel);
+                    let rowClass = '';
+                    if (currentFavorLevel) {
+                        if (cap.favorLevel === currentFavorLevel) {
+                            rowClass = 'cap-row-current';
+                        } else if (capFavorIndex < currentFavorIndex) {
+                            rowClass = 'cap-row-unlocked';
+                        } else {
+                            rowClass = 'cap-row-locked';
+                        }
+                    }
+                    return `
+                        <tr class="${rowClass}">
+                            <td>${cap.favorLevel}</td>
+                            <td>${cap.cap.toLocaleString()}g</td>
+                        </tr>
+                    `;
+                }).join('');
+
+                return `
+                    <table class="cap-table">
+                        <thead>
+                            <tr>
+                                <th>Favor Level</th>
+                                <th>Money Cap</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                `;
+            }
+
+            renderPreferencesTable(preferences) {
+                // Sort by Pref descending so highest favor-per-gift items appear first
+                const sorted = [...preferences].sort((a, b) => (b.Pref || 0) - (a.Pref || 0));
+
+                const rows = sorted.map(pref => {
+                    const desire = pref.Desire || '';
+                    const desireStyle = desire === 'Love'
+                        ? 'color: #155724; font-weight: 600;'
+                        : desire === 'Hate' ? 'color: #721c24; font-weight: 600;' : '';
+                    return `
+                        <tr>
+                            <td>${pref.Name || ''}</td>
+                            <td style="${desireStyle}">${desire}</td>
+                            <td>${pref.Pref !== undefined ? pref.Pref : ''}</td>
+                        </tr>
+                    `;
+                }).join('');
+
+                return `
+                    <table class="cap-table">
+                        <thead>
+                            <tr>
+                                <th>Gift</th>
+                                <th>Desire</th>
+                                <th>Favor/Gift</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                `;
+            }
+
+            attachHandlers() {
+                const container = document.getElementById('storeList');
+
+                // Region accordion headers
+                container.querySelectorAll('.accordion-header').forEach(header => {
+                    header.addEventListener('click', () => {
+                        const id = header.getAttribute('data-accordion');
+                        const content = document.getElementById(id);
+                        header.classList.toggle('active');
+                        content.classList.toggle('active');
+                    });
+                });
+
+                // Tooltip toggle buttons
+                container.querySelectorAll('.tooltip-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const tooltipContainer = btn.closest('.tooltip-container');
+                        const isOpen = tooltipContainer.classList.toggle('tooltip-open');
+                        btn.classList.toggle('tooltip-active', isOpen);
+                    });
+                });
+
+                // Close open tooltips when clicking outside
+                document.addEventListener('click', (e) => {
+                    if (!e.target.closest('.tooltip-container')) {
+                        container.querySelectorAll('.tooltip-container.tooltip-open').forEach(tc => {
+                            tc.classList.remove('tooltip-open');
+                            tc.querySelector('.tooltip-btn')?.classList.remove('tooltip-active');
+                        });
+                    }
+                }, { capture: false });
+            }
+        }
+
+        // Application initialization
+        let dataLoader = new DataLoader();
+        let questBrowser = new QuestBrowser(dataLoader);
+        let inventoryBrowser = new InventoryBrowser(dataLoader);
+        let storeBrowser = new StoreBrowser(dataLoader);
+        let reportsDirectoryHandle = null;
+
+        function showStatus(message, type = 'loading') {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = `status ${type}`;
+        }
+
+        async function handleCharacterFileLoad(file) {
+            try {
+                showStatus('Loading character data...', 'loading');
+
+                await dataLoader.loadCharacterFile(file);
+                showStatus('Loading quest database from CDN...', 'loading');
+
+                await dataLoader.loadQuestData();
+                showStatus(`✓ Loaded ${dataLoader.characterData.Character}'s data with ${dataLoader.characterData.ActiveQuests.length} active quests`, 'success');
+
+                await questBrowser.initialize();
+                storeBrowser.initialize();
+            } catch (error) {
+                showStatus(`✗ Error: ${error.message}`, 'error');
+                console.error('Load error:', error);
+            }
+        }
+
+        async function handleItemsFileLoad(file) {
+            try {
+                showStatus('Loading items data...', 'loading');
+
+                await dataLoader.loadItemsFile(file);
+                showStatus('Loading item database from CDN...', 'loading');
+
+                await dataLoader.loadInventoryData();
+                showStatus(`✓ Loaded ${dataLoader.itemsData.Items.length} items from storage`, 'success');
+
+                await inventoryBrowser.initialize();
+            } catch (error) {
+                showStatus(`✗ Error: ${error.message}`, 'error');
+                console.error('Load error:', error);
+            }
+        }
+
+        async function selectReportsFolder() {
+            try {
+                reportsDirectoryHandle = await window.showDirectoryPicker({ id: 'gorgon-reports', mode: 'read' });
+                const btn = document.getElementById('selectFolderBtn');
+                btn.textContent = '✓ Folder Selected';
+                btn.style.background = '#d4edda';
+                btn.style.color = '#155724';
+                btn.style.borderColor = '#28a745';
+                await loadAllDataFromDirectory(reportsDirectoryHandle);
+            } catch (e) {
+                if (e.name !== 'AbortError') {
+                    showStatus(`✗ Folder error: ${e.message}`, 'error');
+                }
+            }
+        }
+
+        async function loadAllDataFromDirectory(dirHandle) {
+            try {
+                showStatus('Loading character data from folder...', 'loading');
+                await dataLoader.loadCharacterFromDirectory(dirHandle);
+
+                showStatus('Loading items data from folder...', 'loading');
+                await dataLoader.loadItemsFromDirectory(dirHandle);
+
+                showStatus('Loading reference data from CDN...', 'loading');
+                await dataLoader.loadQuestData();
+                await dataLoader.loadInventoryData();
+
+                await questBrowser.initialize();
+                await inventoryBrowser.initialize();
+                storeBrowser.initialize();
+
+                showStatus(
+                    `✓ Loaded ${dataLoader.characterData.Character}'s data from folder: ${dataLoader.characterData.ActiveQuests.length} quests, ${dataLoader.itemsData.Items.length} items`,
+                    'success'
+                );
+            } catch (error) {
+                showStatus(`✗ Error: ${error.message}`, 'error');
+                console.error('Load error:', error);
+            }
+        }
+
+        async function loadAllDataFromAPI() {
+            try {
+                showStatus('Loading game data from disk...', 'loading');
+
+                showStatus('Loading quest database from CDN...', 'loading');
+                await dataLoader.loadQuestData();
+
+                showStatus('Loading item database from CDN...', 'loading');
+                await dataLoader.loadInventoryData();
+
+                // Initialize all browsers
+                await questBrowser.initialize();
+                await inventoryBrowser.initialize();
+                storeBrowser.initialize();
+
+                showStatus(
+                    `✓ Loaded CDN data: Please load character data!`,
+                    'success'
+                );
+
+            } catch (error) {
+                showStatus(`✗ Error: ${error.message}. Use Manual File Loading below.`, 'error');
+                console.error('Load error:', error);
+            }
+        }
+
+        // Tab switching
+        function switchTab(tabName, updateHash = true) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+                if (tab.getAttribute('data-tab') === tabName) {
+                    tab.classList.add('active');
+                }
+            });
+
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(tabName).classList.add('active');
+
+            // Update URL hash
+            if (updateHash) {
+                window.location.hash = tabName;
+            }
+        }
+
+        // Handle hash changes (browser back/forward)
+        function handleHashChange() {
+            const hash = window.location.hash.slice(1); // Remove '#'
+            const validTabs = ['quests', 'inventory', 'stores', 'maps'];
+
+            if (hash && validTabs.includes(hash)) {
+                switchTab(hash, false); // Don't update hash again to avoid loop
+            }
+        }
+
+        // Initialize tab from URL hash on page load
+        function initializeTabFromHash() {
+            const hash = window.location.hash.slice(1);
+            const validTabs = ['quests', 'inventory', 'stores', 'maps'];
+
+            if (hash && validTabs.includes(hash)) {
+                switchTab(hash, false);
+            }
+        }
+
+        // Event listeners
+        document.getElementById('characterFile').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                handleCharacterFileLoad(file);
+            }
+        });
+
+        document.getElementById('itemsFile').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                handleItemsFileLoad(file);
+            }
+        });
+
+        document.getElementById('questSearch').addEventListener('input', (e) => {
+            questBrowser.search(e.target.value);
+        });
+
+        document.getElementById('inventorySearch').addEventListener('input', (e) => {
+            inventoryBrowser.search(e.target.value);
+        });
+
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                switchTab(tab.getAttribute('data-tab'));
+            });
+        });
+
+        document.getElementById('reloadBtn').addEventListener('click', () => {
+            if (reportsDirectoryHandle) {
+                loadAllDataFromDirectory(reportsDirectoryHandle);
+            } else {
+                loadAllDataFromAPI();
+            }
+        });
+
+        // Handle hash changes for tab navigation
+        window.addEventListener('hashchange', handleHashChange);
+
+        // Initialize tab from URL hash
+        initializeTabFromHash();
+
+        // Auto-load data on page load
+        loadAllDataFromAPI();
+
+        // Show empty state initially
+        document.getElementById('questList').innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">📁</div>
+                <h3>No character data loaded</h3>
+                <p>Select your Character.json file or Reports folder above to get started.</p>
+            </div>
+        `;
+
+        document.getElementById('inventoryList').innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">📁</div>
+                <h3>No items data loaded</h3>
+                <p>Select your *_items_*.json file or Reports folderabove to get started.</p>
+            </div>
+        `;
+
+        document.getElementById('storeList').innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🛒</div>
+                <h3>No store data loaded</h3>
+                <p>Click Reload Game Data to load merchant stores.</p>
+            </div>
+        `;
+    </script>
+</body>
+</html>

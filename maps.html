@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Gorgon: Maps</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="maps-page">
+    <div class="container">
+        <header>
+            <h1>🗺️ Project Gorgon - Maps</h1>
+        </header>
+
+        <div class="nav">
+            <a href="index.html">Quest/Inventory Tracker</a>
+            <b>Interactive Maps</b>
+            <a href="chat-watcher.html">Chat Watcher</a>
+            <button class="toggle-controls-btn" id="toggleControlsBtn">
+                <span>Hide Controls</span>
+                <span class="arrow">▲</span>
+            </button>
+        </div>
+
+        <div class="map-controls">
+            <div class="map-selector">
+                <div class="searchable-select" id="mapSelect">
+                    <input
+                        type="text"
+                        class="searchable-select-input"
+                        id="mapSearchInput"
+                        placeholder="Select a zone..."
+                        autocomplete="off"
+                        readonly
+                    >
+                    <span class="searchable-select-arrow">▼</span>
+                    <div class="searchable-select-dropdown" id="mapDropdown"></div>
+                </div>
+            </div>
+
+            <a href="#" class="wiki-link-btn" id="wikiLinkBtn" target="_blank" rel="noopener noreferrer">
+                <span>📖</span>
+                <span id="wikiLinkText">Wiki</span>
+            </a>
+
+            <!-- <div class="info-panel">
+                <div class="info-badge">
+                    <span>🟢 NPCs:</span>
+                    <strong id="npcCount">0</strong>
+                </div>
+                <div class="info-badge">
+                    <span>🟡 Landmarks:</span>
+                    <strong id="landmarkCount">0</strong>
+                </div>
+                <div class="info-badge">
+                    <span>🟣 Portals:</span>
+                    <strong id="portalCount">0</strong>
+                </div>
+            </div> -->
+        </div>
+
+        <div class="adjacent-zones" id="adjacentZones">
+            <div class="adjacent-zones-section" id="adjacentAreasSection" style="display: none;">
+                <div class="adjacent-zones-title">🗺️ Adjacent Zones:</div>
+                <div class="adjacent-zones-links" id="adjacentAreasLinks"></div>
+            </div>
+            <div class="adjacent-zones-section" id="adjacentDungeonsSection" style="display: none;">
+                <div class="adjacent-zones-title">⚔️ Adjacent Dungeons:</div>
+                <div class="adjacent-zones-links" id="adjacentDungeonsLinks"></div>
+            </div>
+        </div>
+
+        <div id="map">
+            <div class="loading">Select a zone to view the map</div>
+        </div>
+
+        <div class="debug-info" id="debugInfo"></div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        class InteractiveMap {
+            constructor() {
+                this.currentZone = null;
+                this.map = null;
+                this.imageOverlay = null;
+                this.layerGroups = {
+                    npcs: null,
+                    landmarks: null,
+                    portals: null
+                };
+
+                // Cache for loaded data
+                this.landmarksData = null;
+                this.npcsData = null;
+
+                // Map metadata
+                this.maps = {
+                    'Serbule': {
+                        url: 'https://wiki.projectgorgon.com/w/images/7/7d/SerbuleMarkedMap.jpg',
+                        area: 'AreaSerbule'
+                    },
+                    'Serbule Hills': {
+                        url: 'https://wiki.projectgorgon.com/w/images/e/ee/SerbuleHillsMarkedMap.jpg',
+                        area: 'AreaSerbuleHills'
+                    },
+                    'Eltibule': {
+                        url: 'https://wiki.projectgorgon.com/w/images/6/67/EltibuleMarkedMap.jpg',
+                        area: 'AreaEltibule'
+                    },
+                    'Kur Mountains': {
+                        url: 'https://wiki.projectgorgon.com/w/images/6/67/KurMountainsMarkedMap.jpg',
+                        area: 'AreaKurMountains'
+                    },
+                    'Ilmari': {
+                        url: 'https://wiki.projectgorgon.com/w/images/e/e6/IlmariMarkedMap.jpg',
+                        area: 'AreaDesert1'
+                    },
+                    'Rahu': {
+                        url: 'https://wiki.projectgorgon.com/w/images/0/02/RahuMarkedMap.jpg',
+                        area: 'AreaRahu'
+                    },
+                    'Gazluk': {
+                        url: 'https://wiki.projectgorgon.com/w/images/4/4e/GazlukMarkedMap.jpg',
+                        area: 'AreaGazluk'
+                    },
+                    'Fae Realm': {
+                        url: 'https://wiki.projectgorgon.com/w/images/5/59/FaeRealmMarkedMap.jpg',
+                        area: 'AreaFaeRealm'
+                    },
+                    'Sun Vale': {
+                        url: 'https://wiki.projectgorgon.com/w/images/9/9b/SunValeMarkedMap.jpg',
+                        area: 'AreaSunVale'
+                    },
+                    'Povus': {
+                        url: 'https://wiki.projectgorgon.com/w/images/b/b5/PovusMarkedMap.jpg',
+                        area: 'AreaPovus'
+                    },
+                    'Red Wing Casino': {
+                        url: 'https://wiki.projectgorgon.com/w/images/1/15/RedWingCasino_Map.png',
+                        area: 'AreaCasino'
+                    },
+                    'Anagoge Island': {
+                        url: 'https://wiki.projectgorgon.com/w/images/b/b7/AnagogeMarkedMap.jpg',
+                        area: 'AreaAnagoge'
+                    },
+                    // Dungeons
+                    'Brain Bug Cave': {
+                        url: 'https://wiki.projectgorgon.com/w/images/7/78/Brain_Bug_CavePlayerMap.png',
+                        area: 'AreaBrainBugCave',
+                        isDungeon: true
+                    },
+                    'Myconian Cave': {
+                        url: 'https://wiki.projectgorgon.com/w/images/8/8e/Myconian_CavePlayerMap.png',
+                        area: 'AreaMyconianCave',
+                        isDungeon: true
+                    },
+                    'Serbule Crypt': {
+                        url: 'https://wiki.projectgorgon.com/w/images/e/e6/Serbule_CryptPlayerMap.png',
+                        area: 'AreaSerbuleCrypt',
+                        isDungeon: true
+                    },
+                    'Serbule Sewers': {
+                        url: 'https://wiki.projectgorgon.com/w/images/4/44/Serbule_SewersPlayerMap.png',
+                        area: 'AreaSerbuleSewers',
+                        isDungeon: true
+                    },
+                    'Wolf Cave': {
+                        url: 'https://wiki.projectgorgon.com/w/images/4/46/Wolf_CavePlayerMap.png',
+                        area: 'AreaWolfCave',
+                        isDungeon: true
+                    },
+                    'Goblin Dungeon': {
+                        url: 'https://wiki.projectgorgon.com/w/images/7/72/Goblin_DungeonUpperCellarPlayerMap.png',
+                        area: 'AreaGoblinDungeon',
+                        isDungeon: true
+                    },
+                    'Goblin Dungeon Lower': {
+                        url: 'https://wiki.projectgorgon.com/w/images/c/cd/Goblin_DungeonLowerLevelsPlayerMap.jpg',
+                        area: 'AreaGoblinDungeonLower',
+                        isDungeon: true
+                    },
+                    'Eltibule Crypt': {
+                        url: 'https://wiki.projectgorgon.com/w/images/7/7c/Eltibule_CryptPlayerMap.png',
+                        area: 'AreaEltibuileCrypt',
+                        isDungeon: true
+                    },
+                    'Dark Chapel': {
+                        url: 'https://wiki.projectgorgon.com/w/images/c/ca/Dark_ChapelPlayerMap.png',
+                        area: 'AreaDarkChapel',
+                        isDungeon: true
+                    },
+                    'Yeti Cave': {
+                        url: 'https://wiki.projectgorgon.com/w/images/e/ed/Yeti_CavePlayerMap.png',
+                        area: 'AreaYetiCave',
+                        isDungeon: true
+                    },
+                    'Kur Tower': {
+                        url: 'https://wiki.projectgorgon.com/w/images/0/0b/Kur_TowerPlayerMap.png',
+                        area: 'AreaKurTower',
+                        isDungeon: true
+                    },
+                    'Gazluk Keep': {
+                        url: 'https://wiki.projectgorgon.com/w/images/6/67/Gazluk_KeepPlayerMap.jpg',
+                        area: 'AreaGazlukKeep',
+                        isDungeon: true
+                    },
+                    'Rahu Sewer': {
+                        url: 'https://wiki.projectgorgon.com/w/images/3/3e/Rahu_SewerPlayerMap.png',
+                        area: 'AreaRahuSewer',
+                        isDungeon: true
+                    },
+                    'Winter Nexus': {
+                        url: 'https://wiki.projectgorgon.com/w/images/0/08/Winter_NexusPlayerMap.png',
+                        area: 'AreaWinterNexus',
+                        isDungeon: true
+                    },
+                    'Labyrinth': {
+                        url: 'https://wiki.projectgorgon.com/w/images/8/8a/LabyrinthPlayerMap.jpeg',
+                        area: 'AreaLabyrinth',
+                        isDungeon: true
+                    },
+                    'Fungal Fortress': {
+                        url: 'https://wiki.projectgorgon.com/w/images/0/02/FungalFortressPlayerMap.jpg',
+                        area: 'AreaFungalFortress',
+                        isDungeon: true
+                    },
+                    'Borghild': {
+                        url: 'https://wiki.projectgorgon.com/w/images/d/d1/BorghildPlayerMap.png',
+                        area: 'AreaBorghild',
+                        isDungeon: true
+                    },
+                    'Animal Nexus': {
+                        url: 'https://wiki.projectgorgon.com/w/images/c/c5/Animal_NexusPlayerMap.png',
+                        area: 'AreaAnimalNexus',
+                        isDungeon: true
+                    },
+                    'Hogan\'s Basement': {
+                        url: 'https://wiki.projectgorgon.com/w/images/f/ff/Hogan%27s_BasementPlayerMap.png',
+                        area: 'AreaHogansBasement',
+                        isDungeon: true
+                    },
+                    'Boarded up Basement': {
+                        url: 'https://wiki.projectgorgon.com/w/images/8/87/BoardedUpBasementPlayerMap.png',
+                        area: 'AreaBoardedUpBasement',
+                        isDungeon: true
+                    },
+                    'Wintertide': {
+                        url: 'https://wiki.projectgorgon.com/w/images/7/7f/The_WintertidePlayerMap.png',
+                        area: 'AreaWintertide',
+                        isDungeon: true
+                    },
+                    'Amaluk Valley Cave': {
+                        url: 'https://wiki.projectgorgon.com/w/images/c/c7/Amaluk_Valley_CavePlayerMap.png',
+                        area: 'AreaAmalukValleyCave',
+                        isDungeon: true
+                    },
+                    'Windy View Cave': {
+                        url: 'https://wiki.projectgorgon.com/w/images/3/3f/Windy_View_CavePlayerMap.png',
+                        area: 'AreaWindyViewCave',
+                        isDungeon: true
+                    },
+                    'Snowblood Shadow Cave': {
+                        url: 'https://wiki.projectgorgon.com/w/images/3/36/Snowblood_Shadow_CavePlayerMap.png',
+                        area: 'AreaSnowbloodShadowCave',
+                        isDungeon: true
+                    },
+                    'No-Name Cave': {
+                        url: 'https://wiki.projectgorgon.com/w/images/9/9f/No-Name_CavePlayerMap.png',
+                        area: 'AreaNoNameCave',
+                        isDungeon: true
+                    },
+                    'Serbule Hills Spider Cave': {
+                        url: 'https://wiki.projectgorgon.com/wiki/File:Serbule_Hills_Spider_CavePlayerMap.png',
+                        area: 'AreaSerbuleHillsSpiderCave',
+                        isDungeon: true
+                    },
+                    'Renalon Den': {
+                        url: 'https://wiki.projectgorgon.com/w/images/e/e8/Ranalon_DenPlayerMap.png',
+                        area: 'AreaRenalonDen',
+                        isDungeon: true
+                    },
+                    'Carpal Tunnels': {
+                        url: 'https://wiki.projectgorgon.com/w/images/9/9a/Carpal_TunnelsPlayerMap.png',
+                        area: 'AreaCarpalTunnels',
+                        isDungeon: true
+                    },
+                    'Crystal Cavern': {
+                        url: 'https://wiki.projectgorgon.com/w/images/4/43/Crystal_CavernPlayerMap.png',
+                        area: 'AreaCrystalCavern',
+                        isDungeon: true
+                    },
+                    'Aktaari Cave': {
+                        url: 'https://wiki.projectgorgon.com/w/images/7/7f/Aktaari_CavePlayerMap.png',
+                        area: 'AreaAktaariCave',
+                        isDungeon: true
+                    },
+                    'Errruka\'s Cave': {
+                        url: 'https://wiki.projectgorgon.com/w/images/d/df/Errruka%27s_CavePlayerMap.png',
+                        area: 'AreaErrrukasCave',
+                        isDungeon: true
+                    },
+                    'Forthragarian Caves': {
+                        url: 'https://wiki.projectgorgon.com/w/images/b/b8/Forthragarian_CavesPlayerMap.png',
+                        area: 'AreaForthragarianCaves',
+                        isDungeon: true
+                    },
+                    'Nightmare Caves': {
+                        url: 'https://wiki.projectgorgon.com/w/images/6/62/Nightmare_CavesPlayerMap.png',
+                        area: 'AreaNightmareCaves',
+                        isDungeon: true
+                    },
+                    'Fish Bowl Cavern': {
+                        url: 'https://wiki.projectgorgon.com/w/images/0/03/Fish_Bowl_CavernPlayerMap.png',
+                        area: 'AreaFishBowlCavern',
+                        isDungeon: true
+                    },
+                    'Molybdenum Mine': {
+                        url: 'https://wiki.projectgorgon.com/w/images/5/5a/Molybdenum_MinePlayerMap.png',
+                        area: 'AreaMolybdenumMine',
+                        isDungeon: true
+                    },
+                    'Sacrificial Sea Cave': {
+                        url: 'https://wiki.projectgorgon.com/w/images/0/09/Sacrificial_Sea_CavePlayerMap.png',
+                        area: 'AreaSacrificialSeaCave',
+                        isDungeon: true
+                    }
+                };
+
+                // Zone adjacency map (from wiki data)
+                this.adjacentZones = {
+                    'Serbule': ['Eltibule', 'Sun Vale', 'Serbule Hills', 'Anagoge Island', 'Brain Bug Cave', 'Myconian Cave', 'Serbule Crypt', 'Serbule Sewers', 'Borghild', 'Carpal Tunnels', 'Crystal Cavern'],
+                    'Serbule Hills': ['Serbule', 'Serbule Hills Spider Cave', 'Renalon Den'],
+                    'Eltibule': ['Serbule', 'Kur Mountains', 'Red Wing Casino', 'Goblin Dungeon', 'Eltibule Crypt', 'Dark Chapel', 'Animal Nexus', 'Hogan\'s Basement', 'Boarded up Basement'],
+                    'Kur Mountains': ['Eltibule', 'Ilmari', 'Gazluk', 'Yeti Cave', 'Kur Tower', 'Wolf Cave'],
+                    'Ilmari': ['Kur Mountains', 'Rahu', 'Labyrinth'],
+                    'Rahu': ['Ilmari', 'Povus', 'Red Wing Casino', 'Rahu Sewer'],
+                    'Gazluk': ['Kur Mountains', 'Povus', 'Gazluk Keep', 'Amaluk Valley Cave', 'Windy View Cave', 'Snowblood Shadow Cave', 'No-Name Cave'],
+                    'Fae Realm': ['Sun Vale', 'Winter Nexus', 'Wintertide'],
+                    'Sun Vale': ['Serbule', 'Fae Realm', 'Winter Nexus', 'Fish Bowl Cavern', 'Molybdenum Mine', 'Sacrificial Sea Cave'],
+                    'Povus': ['Rahu', 'Gazluk', 'Fungal Fortress', 'Aktaari Cave', 'Errruka\'s Cave', 'Forthragarian Caves', 'Nightmare Caves'],
+                    'Red Wing Casino': ['Eltibule', 'Rahu'],
+                    'Anagoge Island': ['Serbule', 'Serbule Hills'],
+                    // Dungeon connections (reverse)
+                    'Brain Bug Cave': ['Serbule'],
+                    'Borghild': ['Serbule'],
+                    'Myconian Cave': ['Serbule'],
+                    'Serbule Crypt': ['Serbule', 'Serbule Sewers'],
+                    'Serbule Sewers': ['Serbule', 'Serbule Crypt'],
+                    'Wolf Cave': ['Kur Mountains'],
+                    'Animal Nexus': ['Eltibule'],
+                    'Dark Chapel': ['Eltibule'],
+                    'Eltibule Crypt': ['Eltibule'],
+                    'Goblin Dungeon': ['Eltibule', 'Goblin Dungeon Lower'],
+                    'Goblin Dungeon Lower': ['Goblin Dungeon'],
+                    "Hogan's Basement": ['Eltibule'],
+                    'Boarded up Basement': ['Eltibule'],
+                    'Yeti Cave': ['Kur Mountains'],
+                    'Kur Tower': ['Kur Mountains'],
+                    'Gazluk Keep': ['Gazluk'],
+                    'Rahu Sewer': ['Rahu'],
+                    'Winter Nexus': ['Sun Vale', 'Fae Realm'],
+                    'Labyrinth': ['Ilmari'],
+                    'Fungal Fortress': ['Povus'],
+                    'Wintertide': ['Fae Realm'],
+                    'Amaluk Valley Cave': ['Gazluk'],
+                    'Windy View Cave': ['Gazluk'],
+                    'Snowblood Shadow Cave': ['Gazluk'],
+                    'No-Name Cave': ['Gazluk'],
+                    'Serbule Hills Spider Cave': ['Serbule Hills', 'Anagoge Island'],
+                    'Renalon Den': ['Serbule Hills'],
+                    'Carpal Tunnels': ['Serbule'],
+                    'Crystal Cavern': ['Serbule'],
+                    'Aktaari Cave': ['Povus'],
+                    'Errruka\'s Cave': ['Povus'],
+                    'Forthragarian Caves': ['Povus'],
+                    'Nightmare Caves': ['Povus'],
+                    'Fish Bowl Cavern': ['Sun Vale'],
+                    'Molybdenum Mine': ['Sun Vale'],
+                    'Sacrificial Sea Cave': ['Sun Vale']
+                };
+            }
+
+            async initialize() {
+                this.populateMapSelector();
+                this.attachEventListeners();
+                this.attachControlsToggle();
+                await this.loadGameData();
+
+                // Load zone from URL hash if present
+                this.loadFromHash();
+            }
+
+            loadFromHash() {
+                const hash = window.location.hash.substring(1); // Remove the '#'
+                if (hash && this.maps[hash]) {
+                    this.selectZone(hash);
+                }
+            }
+
+            populateMapSelector() {
+                const dropdown = document.getElementById('mapDropdown');
+                const sortedMaps = Object.keys(this.maps).sort();
+
+                sortedMaps.forEach(zone => {
+                    const option = document.createElement('div');
+                    option.className = 'searchable-select-option';
+                    option.textContent = zone;
+                    option.dataset.value = zone;
+
+                    option.addEventListener('click', () => {
+                        this.selectZone(zone);
+                    });
+
+                    dropdown.appendChild(option);
+                });
+            }
+
+            attachEventListeners() {
+                const selectContainer = document.getElementById('mapSelect');
+                const input = document.getElementById('mapSearchInput');
+                const dropdown = document.getElementById('mapDropdown');
+
+                // Open dropdown when clicking input
+                input.addEventListener('click', () => {
+                    selectContainer.classList.toggle('open');
+                    if (selectContainer.classList.contains('open')) {
+                        input.removeAttribute('readonly');
+                        input.select();
+                    }
+                });
+
+                // Filter options as user types
+                input.addEventListener('input', (e) => {
+                    this.filterOptions(e.target.value);
+                });
+
+                // Close dropdown when clicking outside
+                document.addEventListener('click', (e) => {
+                    if (!selectContainer.contains(e.target)) {
+                        this.closeDropdown();
+                    }
+                });
+
+                // Handle keyboard navigation
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape') {
+                        this.closeDropdown();
+                    } else if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        this.focusNextOption();
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        this.focusPreviousOption();
+                    } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        this.selectFocusedOption();
+                    }
+                });
+
+                // Listen for hash changes (browser back/forward)
+                window.addEventListener('hashchange', () => {
+                    this.loadFromHash();
+                });
+            }
+
+            attachControlsToggle() {
+                const toggleBtn = document.getElementById('toggleControlsBtn');
+                const mapControls = document.querySelector('.map-controls');
+                const adjacentZones = document.querySelector('.adjacent-zones');
+
+                toggleBtn.addEventListener('click', () => {
+                    const isCollapsed = mapControls.classList.contains('collapsed');
+
+                    if (isCollapsed) {
+                        // Expand
+                        mapControls.classList.remove('collapsed');
+                        adjacentZones.classList.remove('collapsed');
+                        toggleBtn.classList.remove('collapsed');
+                        toggleBtn.querySelector('span:first-child').textContent = 'Hide Controls';
+                    } else {
+                        // Collapse
+                        mapControls.classList.add('collapsed');
+                        adjacentZones.classList.add('collapsed');
+                        toggleBtn.classList.add('collapsed');
+                        toggleBtn.querySelector('span:first-child').textContent = 'Show Controls';
+                    }
+                });
+            }
+
+            filterOptions(searchTerm) {
+                const dropdown = document.getElementById('mapDropdown');
+                const options = dropdown.querySelectorAll('.searchable-select-option');
+                const term = searchTerm.toLowerCase();
+                let visibleCount = 0;
+
+                options.forEach(option => {
+                    const text = option.textContent.toLowerCase();
+                    if (text.includes(term)) {
+                        option.classList.remove('hidden');
+                        visibleCount++;
+                    } else {
+                        option.classList.add('hidden');
+                    }
+                });
+
+                // Show/hide "no results" message
+                let noResults = dropdown.querySelector('.searchable-select-no-results');
+                if (visibleCount === 0) {
+                    if (!noResults) {
+                        noResults = document.createElement('div');
+                        noResults.className = 'searchable-select-no-results';
+                        noResults.textContent = 'No zones found';
+                        dropdown.appendChild(noResults);
+                    }
+                } else if (noResults) {
+                    noResults.remove();
+                }
+            }
+
+            selectZone(zoneName) {
+                const input = document.getElementById('mapSearchInput');
+                const dropdown = document.getElementById('mapDropdown');
+                const options = dropdown.querySelectorAll('.searchable-select-option');
+
+                // Update input value
+                input.value = zoneName;
+
+                // Update selected state
+                options.forEach(opt => {
+                    if (opt.dataset.value === zoneName) {
+                        opt.classList.add('selected');
+                    } else {
+                        opt.classList.remove('selected');
+                    }
+                });
+
+                // Update URL hash
+                if (window.location.hash !== `#${zoneName}`) {
+                    window.location.hash = zoneName;
+                }
+
+                // Update wiki link
+                this.updateWikiLink(zoneName);
+
+                // Close dropdown
+                this.closeDropdown();
+
+                // Load the map
+                this.loadMap(zoneName);
+            }
+
+            updateWikiLink(zoneName) {
+                const wikiBtn = document.getElementById('wikiLinkBtn');
+                const wikiText = document.getElementById('wikiLinkText');
+
+                if (zoneName) {
+                    const wikiSearchUrl = `https://wiki.projectgorgon.com/wiki/?search=${encodeURIComponent(zoneName)}`;
+                    wikiBtn.href = wikiSearchUrl;
+                    wikiText.textContent = `Wiki for ${zoneName}`;
+                    wikiBtn.classList.add('visible');
+                } else {
+                    wikiBtn.classList.remove('visible');
+                }
+            }
+
+            closeDropdown() {
+                const selectContainer = document.getElementById('mapSelect');
+                const input = document.getElementById('mapSearchInput');
+                const dropdown = document.getElementById('mapDropdown');
+
+                selectContainer.classList.remove('open');
+                input.setAttribute('readonly', 'readonly');
+
+                // Reset filter
+                const options = dropdown.querySelectorAll('.searchable-select-option');
+                options.forEach(opt => opt.classList.remove('hidden'));
+
+                // Remove "no results" message if present
+                const noResults = dropdown.querySelector('.searchable-select-no-results');
+                if (noResults) {
+                    noResults.remove();
+                }
+            }
+
+            focusNextOption() {
+                const dropdown = document.getElementById('mapDropdown');
+                const visibleOptions = Array.from(dropdown.querySelectorAll('.searchable-select-option:not(.hidden)'));
+                if (visibleOptions.length === 0) return;
+
+                const currentIndex = visibleOptions.findIndex(opt => opt.classList.contains('focused'));
+                const nextIndex = currentIndex < visibleOptions.length - 1 ? currentIndex + 1 : 0;
+
+                visibleOptions.forEach((opt, idx) => {
+                    opt.classList.toggle('focused', idx === nextIndex);
+                });
+
+                visibleOptions[nextIndex]?.scrollIntoView({ block: 'nearest' });
+            }
+
+            focusPreviousOption() {
+                const dropdown = document.getElementById('mapDropdown');
+                const visibleOptions = Array.from(dropdown.querySelectorAll('.searchable-select-option:not(.hidden)'));
+                if (visibleOptions.length === 0) return;
+
+                const currentIndex = visibleOptions.findIndex(opt => opt.classList.contains('focused'));
+                const prevIndex = currentIndex > 0 ? currentIndex - 1 : visibleOptions.length - 1;
+
+                visibleOptions.forEach((opt, idx) => {
+                    opt.classList.toggle('focused', idx === prevIndex);
+                });
+
+                visibleOptions[prevIndex]?.scrollIntoView({ block: 'nearest' });
+            }
+
+            selectFocusedOption() {
+                const dropdown = document.getElementById('mapDropdown');
+                const focusedOption = dropdown.querySelector('.searchable-select-option.focused');
+                if (focusedOption) {
+                    this.selectZone(focusedOption.dataset.value);
+                }
+            }
+
+            async loadGameData() {
+                try {
+                    const [landmarks, npcs] = await Promise.all([
+                        fetch('https://cdn.projectgorgon.com/v457/data/landmarks.json').then(r => r.json()),
+                        fetch('https://cdn.projectgorgon.com/v457/data/npcs.json').then(r => r.json())
+                    ]);
+
+                    this.landmarksData = landmarks;
+                    this.npcsData = npcs;
+
+                    console.log('✓ Game data loaded successfully');
+                } catch (error) {
+                    console.error('✗ Error loading game data:', error);
+                }
+            }
+
+            async loadMap(zoneName) {
+                const mapData = this.maps[zoneName];
+                if (!mapData) return;
+
+                this.currentZone = zoneName;
+
+                // Show loading
+                document.getElementById('map').innerHTML = '<div class="loading">Loading map...</div>';
+
+                try {
+                    // Load image to get dimensions
+                    const img = await this.loadImage(mapData.url);
+                    const width = img.naturalWidth;
+                    const height = img.naturalHeight;
+
+                    // Calculate bounds from coordinate data
+                    const bounds = await this.calculateMapBounds(mapData.area, width, height);
+
+                    console.log(`Map: ${zoneName}, Size: ${width}x${height}`, bounds);
+
+                    // Create/recreate Leaflet map
+                    this.setupLeafletMap(mapData.url, width, height, bounds);
+
+                    // Add markers
+                    // this.addMarkers(mapData.area, bounds);
+
+                    // Update adjacent zones
+                    this.updateAdjacentZones(zoneName);
+
+                } catch (error) {
+                    console.error('Error loading map:', error);
+                    document.getElementById('map').innerHTML = `<div class="loading">Failed to load map for ${zoneName}</div>`;
+                }
+            }
+
+            loadImage(url) {
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => resolve(img);
+                    img.onerror = reject;
+                    img.src = url;
+                });
+            }
+
+            async calculateMapBounds(areaName, imageWidth, imageHeight) {
+                // Collect all coordinates
+                const allCoords = [];
+
+                // Collect NPC coordinates
+                if (this.npcsData) {
+                    Object.values(this.npcsData).forEach(npc => {
+                        if (npc.AreaName === areaName && npc.Pos) {
+                            const coords = this.parseCoords(npc.Pos);
+                            if (coords) allCoords.push(coords);
+                        }
+                    });
+                }
+
+                // Collect landmark coordinates
+                if (this.landmarksData && this.landmarksData[areaName]) {
+                    this.landmarksData[areaName].forEach(landmark => {
+                        if (landmark.Loc) {
+                            const coords = this.parseCoords(landmark.Loc);
+                            if (coords) allCoords.push(coords);
+                        }
+                    });
+                }
+
+                if (allCoords.length === 0) {
+                    console.warn(`No coordinates found for ${areaName}, using default bounds`);
+                    return {
+                        minX: 0, maxX: 1000,
+                        minZ: 0, maxZ: 1000
+                    };
+                }
+
+                // Calculate bounds
+                const xs = allCoords.map(c => c.x);
+                const zs = allCoords.map(c => c.z);
+
+                const minX = Math.min(...xs);
+                const maxX = Math.max(...xs);
+                const minZ = Math.min(...zs);
+                const maxZ = Math.max(...zs);
+
+                // Add 10% padding
+                const paddingX = (maxX - minX) * 0.1;
+                const paddingZ = (maxZ - minZ) * 0.1;
+
+                return {
+                    minX: minX - paddingX,
+                    maxX: maxX + paddingX,
+                    minZ: minZ - paddingZ,
+                    maxZ: maxZ + paddingZ
+                };
+            }
+
+            setupLeafletMap(imageUrl, width, height, coordBounds) {
+                // Clear existing map
+                if (this.map) {
+                    this.map.remove();
+                }
+
+                document.getElementById('map').innerHTML = '';
+
+                // Create Leaflet map with simple CRS (for non-geographic coordinates)
+                this.map = L.map('map', {
+                    crs: L.CRS.Simple,
+                    minZoom: -2,
+                    maxZoom: 2,
+                    zoomSnap: 0.1,
+                    zoomDelta: 0.5
+                });
+
+                // Calculate bounds for Leaflet (in pixel coordinates)
+                // Leaflet's Simple CRS: [0,0] is top-left, [height, width] is bottom-right
+                const bounds = [[0, 0], [height, width]];
+
+                // Add the image overlay
+                this.imageOverlay = L.imageOverlay(imageUrl, bounds).addTo(this.map);
+
+                // Fit the map to the image bounds
+                this.map.fitBounds(bounds);
+
+                // Store coordinate transformation info
+                this.coordBounds = coordBounds;
+                this.imageBounds = { width, height };
+
+                // Create layer groups (not added to map by default - user can toggle them on)
+                this.layerGroups.npcs = L.layerGroup();
+                this.layerGroups.landmarks = L.layerGroup();
+                this.layerGroups.portals = L.layerGroup();
+
+                // Add layer control
+                const overlays = {
+                    "🟢 NPCs": this.layerGroups.npcs,
+                    "🟡 Landmarks": this.layerGroups.landmarks,
+                    "🟣 Portals": this.layerGroups.portals
+                };
+
+                // L.control.layers(null, overlays, {
+                //     collapsed: false,
+                //     position: 'topright'
+                // }).addTo(this.map);
+
+                // Add scale
+                L.control.scale({
+                    imperial: false,
+                    metric: true
+                }).addTo(this.map);
+            }
+
+            gameToPixelCoords(gameCoords) {
+                const { x, z } = gameCoords;
+                const { minX, maxX, minZ, maxZ } = this.coordBounds;
+                const { width, height } = this.imageBounds;
+
+                // Normalize to 0-1
+                const normX = (x - minX) / (maxX - minX);
+                const normZ = (z - minZ) / (maxZ - minZ);
+
+                // Convert to pixel coordinates
+                // Note: Leaflet uses [y, x] format (lat, lng)
+                const pixelX = normX * width;
+                const pixelY = normZ * height;
+
+                return [pixelY, pixelX]; // Return as [lat, lng] for Leaflet
+            }
+
+            addMarkers(areaName, bounds) {
+                // Clear existing markers
+                this.layerGroups.npcs.clearLayers();
+                this.layerGroups.landmarks.clearLayers();
+                this.layerGroups.portals.clearLayers();
+
+                let npcCount = 0, landmarkCount = 0, portalCount = 0;
+
+                // Add NPC markers
+                if (this.npcsData) {
+                    Object.entries(this.npcsData).forEach(([npcId, npc]) => {
+                        if (npc.AreaName === areaName && npc.Pos) {
+                            const coords = this.parseCoords(npc.Pos);
+                            if (coords) {
+                                this.addNPCMarker(npc, coords);
+                                npcCount++;
+                            }
+                        }
+                    });
+                }
+
+                // Add landmark markers
+                if (this.landmarksData && this.landmarksData[areaName]) {
+                    this.landmarksData[areaName].forEach(landmark => {
+                        if (landmark.Loc) {
+                            const coords = this.parseCoords(landmark.Loc);
+                            if (coords) {
+                                const isPortal = landmark.Type === 'Portal';
+                                this.addLandmarkMarker(landmark, coords, isPortal);
+                                if (isPortal) {
+                                    portalCount++;
+                                } else {
+                                    landmarkCount++;
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // Update counts
+                if (document.getElementById('npcCount')) {
+                    document.getElementById('npcCount').textContent = npcCount;
+                    document.getElementById('landmarkCount').textContent = landmarkCount;
+                    document.getElementById('portalCount').textContent = portalCount;
+                }
+
+                console.log(`✓ Added ${npcCount} NPCs, ${landmarkCount} landmarks, ${portalCount} portals`);
+            }
+
+            addNPCMarker(npc, gameCoords) {
+                const pixelCoords = this.gameToPixelCoords(gameCoords);
+
+                const icon = L.divIcon({
+                    className: 'custom-marker marker-npc',
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                });
+
+                const marker = L.marker(pixelCoords, { icon })
+                    .bindPopup(this.createNPCPopup(npc, gameCoords));
+
+                marker.addTo(this.layerGroups.npcs);
+            }
+
+            addLandmarkMarker(landmark, gameCoords, isPortal) {
+                const pixelCoords = this.gameToPixelCoords(gameCoords);
+
+                const className = isPortal ? 'custom-marker marker-portal' : 'custom-marker marker-landmark';
+                const icon = L.divIcon({
+                    className: className,
+                    iconSize: isPortal ? [24, 24] : [20, 20],
+                    iconAnchor: isPortal ? [12, 12] : [10, 10]
+                });
+
+                const marker = L.marker(pixelCoords, { icon })
+                    .bindPopup(this.createLandmarkPopup(landmark, gameCoords, isPortal));
+
+                const layerGroup = isPortal ? this.layerGroups.portals : this.layerGroups.landmarks;
+                marker.addTo(layerGroup);
+            }
+
+            createNPCPopup(npc, coords) {
+                return `
+                    <div class="popup-title">${npc.Name}</div>
+                    <div class="popup-type npc">NPC</div>
+                    <div class="popup-coords">
+                        Game: (${coords.x.toFixed(1)}, ${coords.z.toFixed(1)})<br>
+                        Area: ${npc.AreaName}
+                    </div>
+                `;
+            }
+
+            createLandmarkPopup(landmark, coords, isPortal) {
+                const type = isPortal ? 'portal' : 'landmark';
+                const typeLabel = isPortal ? 'Portal' : landmark.Type || 'Landmark';
+
+                let content = `
+                    <div class="popup-title">${landmark.Name}</div>
+                    <div class="popup-type ${type}">${typeLabel}</div>
+                `;
+
+                if (landmark.Desc) {
+                    content += `<div style="margin: 8px 0; color: #495057;">${landmark.Desc}</div>`;
+                }
+
+                content += `
+                    <div class="popup-coords">
+                        Game: (${coords.x.toFixed(1)}, ${coords.z.toFixed(1)})
+                    </div>
+                `;
+
+                return content;
+            }
+
+            parseCoords(coordString) {
+                // Parse "x:123.45 y:67.89 z:234.56"
+                const matches = coordString.match(/x:([-\d.]+)\s+y:([-\d.]+)\s+z:([-\d.]+)/);
+                if (matches) {
+                    return {
+                        x: parseFloat(matches[1]),
+                        y: parseFloat(matches[2]),
+                        z: parseFloat(matches[3])
+                    };
+                }
+                return null;
+            }
+
+            updateAdjacentZones(zoneName) {
+                const container = document.getElementById('adjacentZones');
+                const areasSection = document.getElementById('adjacentAreasSection');
+                const dungeonsSection = document.getElementById('adjacentDungeonsSection');
+                const areasLinks = document.getElementById('adjacentAreasLinks');
+                const dungeonsLinks = document.getElementById('adjacentDungeonsLinks');
+
+                const adjacentZonesList = this.adjacentZones[zoneName];
+
+                if (!adjacentZonesList || adjacentZonesList.length === 0) {
+                    container.classList.remove('visible');
+                    areasSection.style.display = 'none';
+                    dungeonsSection.style.display = 'none';
+                    return;
+                }
+
+                // Separate zones from dungeons
+                const areas = [];
+                const dungeons = [];
+
+                adjacentZonesList.forEach(adjacentZone => {
+                    if (this.maps[adjacentZone]?.isDungeon) {
+                        dungeons.push(adjacentZone);
+                    } else {
+                        areas.push(adjacentZone);
+                    }
+                });
+
+                // Clear previous links
+                areasLinks.innerHTML = '';
+                dungeonsLinks.innerHTML = '';
+
+                // Add links for adjacent areas
+                if (areas.length > 0) {
+                    areas.forEach(adjacentZone => {
+                        const button = document.createElement('button');
+                        button.className = 'adjacent-zone-btn';
+                        button.textContent = adjacentZone;
+                        button.onclick = () => {
+                            this.selectZone(adjacentZone);
+                        };
+                        areasLinks.appendChild(button);
+                    });
+                    areasSection.style.display = 'block';
+                } else {
+                    areasSection.style.display = 'none';
+                }
+
+                // Add links for adjacent dungeons
+                if (dungeons.length > 0) {
+                    dungeons.forEach(adjacentZone => {
+                        const button = document.createElement('button');
+                        button.className = 'adjacent-zone-btn';
+                        button.textContent = adjacentZone;
+                        button.onclick = () => {
+                            this.selectZone(adjacentZone);
+                        };
+                        dungeonsLinks.appendChild(button);
+                    });
+                    dungeonsSection.style.display = 'block';
+                } else {
+                    dungeonsSection.style.display = 'none';
+                }
+
+                // Show the container if there are any adjacent zones
+                if (areas.length > 0 || dungeons.length > 0) {
+                    container.classList.add('visible');
+                } else {
+                    container.classList.remove('visible');
+                }
+            }
+        }
+
+        // Initialize the map
+        const interactiveMap = new InteractiveMap();
+        interactiveMap.initialize();
+    </script>
+</body>
+</html>

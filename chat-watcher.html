@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Gorgon: Chat Watcher</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>💬 Project Gorgon: Chat Watcher</h1>
+            <p>Monitor game chat for specific patterns</p>
+        </header>
+
+        <div class="nav">
+            <a href="index.html">Quest/Inventory Tracker</a>
+            <a href="maps.html">Interactive Maps</a>
+            <b>Chat Watcher</b>
+        </div>
+
+        <div class="controls">
+            <div class="control-row">
+                <label for="searchPattern">Search Pattern:</label>
+                <div>
+                    <input type="text" id="searchPattern" placeholder="[NPC Chatter] Ursula" value="[NPC Chatter] Ursula">
+                    <div class="help-text">Pattern to watch for in chat logs (case-sensitive)</div>
+                </div>
+            </div>
+
+            <div class="control-row">
+                <label for="soundUrl">Alert Sound (URL):</label>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="url" id="soundUrl" placeholder="https://example.com/alert.mp3" style="flex: 1;">
+                    <button class="test-sound-btn" onclick="chatWatcher.testSound()">🔊 Test</button>
+                </div>
+            </div>
+
+            <div class="control-row">
+                <label for="soundFile">Or Upload File:</label>
+                <input type="file" id="soundFile" accept="audio/*">
+            </div>
+
+            <div class="control-row">
+                <label for="pollInterval">Poll Interval (seconds):</label>
+                <input type="number" id="pollInterval" min="1" max="30" value="2" step="1">
+            </div>
+
+            <div class="control-row">
+                <label>ChatLogs Folder:</label>
+                <div>
+                    <button class="btn-secondary" id="selectChatFolderBtn" onclick="chatWatcher.selectChatLogsFolder()">📂 Select ChatLogs Folder</button>
+                    <div class="help-text">Folder: <code>%LocalAppData%Low\Elder Game\Project Gorgon\ChatLogs</code></div>
+                </div>
+            </div>
+
+            <div class="control-row">
+                <label></label>
+                <div class="button-group">
+                    <button class="btn-primary" id="startBtn" onclick="chatWatcher.start()">▶️ Start Watching</button>
+                    <button class="btn-danger" id="stopBtn" onclick="chatWatcher.stop()" disabled>⏹️ Stop</button>
+                    <button class="btn-secondary" onclick="chatWatcher.clearDisplay()">🗑️ Clear Display</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Stopped</span>
+            </div>
+            <div id="fileInfo">No file loaded</div>
+        </div>
+
+        <div style="padding: 30px; padding-bottom: 0;">
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-label">Total Lines</div>
+                    <div class="stat-value" id="totalLines">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Matches Found</div>
+                    <div class="stat-value" id="matchCount">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Last Match</div>
+                    <div class="stat-value" id="lastMatch" style="font-size: 1em;">None</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="chat-display" id="chatDisplay">
+            <div class="empty-state">
+                <div class="empty-state-icon">💬</div>
+                <h3>Chat watcher is stopped</h3>
+                <p>Configure your settings and click "Start Watching" to begin monitoring chat logs.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class ChatWatcher {
+            constructor() {
+                this.isRunning = false;
+                this.offset = 0;
+                this.pollInterval = 2000;
+                this.pollTimer = null;
+                this.audio = new Audio();
+                this.soundUrl = '';
+                this.totalLines = 0;
+                this.matchCount = 0;
+                this.maxDisplayLines = 200;
+                this.chatLogsDirHandle = null;
+                this.chatFileHandle = null;
+            }
+
+            async selectChatLogsFolder() {
+                try {
+                    this.chatLogsDirHandle = await window.showDirectoryPicker({ id: 'gorgon-chatlogs', mode: 'read' });
+                    this.chatFileHandle = null; // reset so next poll re-discovers the latest file
+                    const btn = document.getElementById('selectChatFolderBtn');
+                    btn.textContent = '✓ Folder Selected';
+                    btn.style.background = '#28a745';
+                } catch (e) {
+                    if (e.name !== 'AbortError') {
+                        alert('Error selecting folder: ' + e.message);
+                    }
+                }
+            }
+
+            async findLatestChatFile() {
+                let latestHandle = null, latestMtime = 0;
+                for await (const [name, handle] of this.chatLogsDirHandle.entries()) {
+                    if (handle.kind === 'file' && name.startsWith('Chat-') && name.endsWith('.log')) {
+                        const file = await handle.getFile();
+                        if (file.lastModified > latestMtime) {
+                            latestMtime = file.lastModified;
+                            latestHandle = handle;
+                        }
+                    }
+                }
+                return latestHandle;
+            }
+
+            start() {
+                if (this.isRunning) return;
+
+                // Get configuration
+                const pattern = document.getElementById('searchPattern').value;
+                const soundUrl = document.getElementById('soundUrl').value;
+                const soundFile = document.getElementById('soundFile').files[0];
+                const interval = parseInt(document.getElementById('pollInterval').value) * 1000;
+
+                if (!pattern) {
+                    alert('Please enter a search pattern');
+                    return;
+                }
+
+                // Configure sound
+                if (soundFile) {
+                    this.soundUrl = URL.createObjectURL(soundFile);
+                    this.audio.src = this.soundUrl;
+                } else if (soundUrl) {
+                    this.soundUrl = soundUrl;
+                    this.audio.src = soundUrl;
+                } else {
+                    // Use a default beep sound (data URI for a simple beep)
+                    this.soundUrl = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBiuByvLZiTYIGGa56+mbUQwNUavk77FiFAY7k9jxxHIsBS1+y+/bjUgLGF5+z4iJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBiuByvLZiTYIGGa56+mbUQwNUavk77FiFAY7k9jxxHIsBS1+y+/bjUgLGF5+';
+                }
+
+                this.searchPattern = pattern;
+                this.pollInterval = interval;
+                this.isRunning = true;
+                this.offset = 0;
+                this.chatFileHandle = null; // re-discover latest file on each start
+
+                // Update UI
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = false;
+                document.getElementById('statusDot').classList.add('active');
+                document.getElementById('statusText').textContent = 'Watching...';
+
+                // Clear display
+                this.clearDisplay();
+
+                // Start polling
+                this.poll();
+            }
+
+            stop() {
+                this.isRunning = false;
+
+                if (this.pollTimer) {
+                    clearTimeout(this.pollTimer);
+                    this.pollTimer = null;
+                }
+
+                // Update UI
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = true;
+                document.getElementById('statusDot').classList.remove('active');
+                document.getElementById('statusText').textContent = 'Stopped';
+            }
+
+            async poll() {
+                if (!this.isRunning) return;
+
+                try {
+                    if (this.chatLogsDirHandle) {
+                        await this.pollFromDirectory();
+                    } else {
+                        await this.pollFromAPI();
+                    }
+                } catch (error) {
+                    console.error('Error polling chat:', error);
+                    document.getElementById('statusText').textContent = `Error: ${error.message}`;
+                }
+
+                this.pollTimer = setTimeout(() => this.poll(), this.pollInterval);
+            }
+
+            async pollFromAPI() {
+                const response = await fetch(`/api/chat?offset=${this.offset}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const data = await response.json();
+                document.getElementById('fileInfo').textContent = `Monitoring: ${data.filename}`;
+                if (data.lines.length > 0) {
+                    this.processLines(data.lines);
+                    this.offset = data.offset;
+                }
+            }
+
+            async pollFromDirectory() {
+                if (!this.chatFileHandle) {
+                    this.chatFileHandle = await this.findLatestChatFile();
+                    if (!this.chatFileHandle) throw new Error('No Chat-*.log files found in selected folder');
+                    this.offset = 0; // start from beginning of newly found file
+                }
+                const file = await this.chatFileHandle.getFile();
+                document.getElementById('fileInfo').textContent = `Monitoring: ${file.name}`;
+                if (file.size > this.offset) {
+                    const text = await file.slice(this.offset).text();
+                    const lines = text.split('\n').filter(l => l.trim());
+                    if (lines.length > 0) {
+                        this.processLines(lines);
+                    }
+                    this.offset = file.size;
+                }
+            }
+
+            processLines(lines) {
+                const display = document.getElementById('chatDisplay');
+
+                // Remove empty state if present
+                if (display.querySelector('.empty-state')) {
+                    display.innerHTML = '';
+                }
+
+                lines.forEach(line => {
+                    this.totalLines++;
+
+                    // Check if line matches pattern
+                    const isMatch = line.includes(this.searchPattern);
+                    const isNpcChatter = line.includes('[NPC Chatter]');
+
+                    if (isMatch) {
+                        this.matchCount++;
+                        this.playSound();
+
+                        // Update last match time
+                        const now = new Date();
+                        document.getElementById('lastMatch').textContent =
+                            now.toLocaleTimeString();
+                    }
+
+                    // Create line element
+                    const lineEl = document.createElement('div');
+                    lineEl.className = 'chat-line';
+                    if (isMatch) lineEl.classList.add('matched');
+                    else if (isNpcChatter) lineEl.classList.add('npc-chatter');
+                    lineEl.textContent = line;
+
+                    // Add to display
+                    display.appendChild(lineEl);
+
+                    // Keep only last N lines
+                    while (display.children.length > this.maxDisplayLines) {
+                        display.removeChild(display.firstChild);
+                    }
+                });
+
+                // Update stats
+                document.getElementById('totalLines').textContent = this.totalLines.toLocaleString();
+                document.getElementById('matchCount').textContent = this.matchCount.toLocaleString();
+
+                // Auto-scroll to bottom
+                display.scrollTop = display.scrollHeight;
+            }
+
+            playSound() {
+                if (this.soundUrl) {
+                    this.audio.currentTime = 0;
+                    this.audio.play().catch(err => {
+                        console.error('Error playing sound:', err);
+                    });
+                }
+            }
+
+            testSound() {
+                const soundUrl = document.getElementById('soundUrl').value;
+                const soundFile = document.getElementById('soundFile').files[0];
+
+                if (soundFile) {
+                    const url = URL.createObjectURL(soundFile);
+                    const testAudio = new Audio(url);
+                    testAudio.play().catch(err => alert('Error playing sound: ' + err.message));
+                } else if (soundUrl) {
+                    const testAudio = new Audio(soundUrl);
+                    testAudio.play().catch(err => alert('Error playing sound: ' + err.message));
+                } else {
+                    alert('Please provide a sound URL or select a file');
+                }
+            }
+
+            clearDisplay() {
+                const display = document.getElementById('chatDisplay');
+                display.innerHTML = '';
+                this.totalLines = 0;
+                this.matchCount = 0;
+
+                document.getElementById('totalLines').textContent = '0';
+                document.getElementById('matchCount').textContent = '0';
+                document.getElementById('lastMatch').textContent = 'None';
+
+                if (!this.isRunning) {
+                    display.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">💬</div>
+                            <h3>Chat watcher is stopped</h3>
+                            <p>Configure your settings and click "Start Watching" to begin monitoring chat logs.</p>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // Initialize chat watcher
+        const chatWatcher = new ChatWatcher();
+
+        // Stop watching when page unloads
+        window.addEventListener('beforeunload', () => {
+            chatWatcher.stop();
+        });
+    </script>
+</body>
+</html>
