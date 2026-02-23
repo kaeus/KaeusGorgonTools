@@ -60,10 +60,6 @@
                     <div class="label">Active Quests</div>
                 </div>
                 <div class="stat-card">
-                    <div class="number" id="characterLevel">0</div>
-                    <div class="label">Character Level</div>
-                </div>
-                <div class="stat-card">
                     <div class="number" id="goldAmount">0</div>
                     <div class="label">Gold</div>
                 </div>
@@ -382,23 +378,10 @@
                 const characterData = this.dataLoader.characterData;
 
                 document.getElementById('totalQuests').textContent = this.allQuests.length;
-                document.getElementById('characterLevel').textContent = this.calculateAverageLevel();
                 document.getElementById('goldAmount').textContent = characterData.Currencies.GOLD.toLocaleString();
 
                 document.getElementById('questStats').style.display = 'grid';
                 document.getElementById('questSearchBar').style.display = 'block';
-            }
-
-            calculateAverageLevel() {
-                const skills = this.dataLoader.characterData.Skills;
-                const skillLevels = Object.values(skills)
-                    .filter(skill => skill.Level > 0)
-                    .map(skill => skill.Level);
-
-                if (skillLevels.length === 0) return 0;
-
-                const avg = skillLevels.reduce((a, b) => a + b, 0) / skillLevels.length;
-                return Math.round(avg);
             }
 
             search(query) {
