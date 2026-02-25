@@ -1,8 +1,8 @@
 # Gorgon Quest Tracker
 
-A web-based utility for tracking inventory, storage, vendors, and active quests in Project Gorgon. Also has a map explorer and a chat watcher (still needs more work).
+A web-based utility for tracking inventory, storage, vendors, and active quests in Project Gorgon. Runs entirely in the browser — no server or installation required.
 
-# **[Launch Tracker](http://kaeus.github.io/KaeusGorgonTools/index.html)**  
+# **[Launch Tracker](http://kaeus.github.io/KaeusGorgonTools/index.html)**
 
 ## Features
 
@@ -27,6 +27,11 @@ A web-based utility for tracking inventory, storage, vendors, and active quests 
   - Lists what item categories each merchant buys
   - Tooltip with full favor tier cap breakdown for each merchant
   - Gift preferences table (Love/Hate items and favor-per-gift values)
+  - **Vendor Tracker** - Record remaining gold and reset timer per vendor
+    - Persisted in localStorage across reloads
+    - Reset countdown ticks live in the table
+    - Edit via modal dialog (Escape or ✕ to cancel)
+  - **Auto-capture from Player.log** - Click "Watch Player.log" in the Vendors tab to select `Player.log` once; the tracker auto-fills remaining gold and reset time whenever you open a vendor shop in-game, with no further interaction needed
 
 - 🗺️ **Interactive Maps** (maps.html) - Dedicated map viewer with markers
   - View zone maps with NPC locations and landmarks
@@ -43,18 +48,36 @@ A web-based utility for tracking inventory, storage, vendors, and active quests 
   - Statistics tracking (total lines, matches, last match time)
   - Auto-scrolling chat display with line limit
 
-### Data Sources
+## Usage
 
-**Local Files:**
-- `Character_{Character}_{Server}.json` - Character stats, active quests, skills, NPCs
-- `CHARACTERNAME_SERVERNAME_items_*.json` - Inventory and storage items
+Open `index.html` directly in Chrome or Edge (no server needed). On first load:
 
-**CDN Data:**
-- Quest definitions from `https://cdn.projectgorgon.com/v457/data/quests.json`
-- Item definitions from `https://cdn.projectgorgon.com/v457/data/items.json`
-- NPC info, storage vaults, etc.
+1. Click **Select Folder** and navigate to your Reports folder:
+   `%LocalAppData%Low\Elder Game\Project Gorgon\Reports`
+2. The tracker loads your character data and all CDN reference data automatically.
+3. On future loads the folder permission is remembered for the session — no re-selection needed.
+
+For the **Chat Watcher**, select your ChatLogs folder once:
+`%LocalAppData%Low\Elder Game\Project Gorgon\ChatLogs`
+
+For **vendor auto-capture**, select your Player.log once from the Vendors tab:
+`%LocalAppData%Low\Elder Game\Project Gorgon\Player.log`
+
+Folder and file selections are persisted via IndexedDB and auto-resume if the browser still has permission.
+
+## Data Sources
+
+**Local Files** (selected via browser file picker):
+- `Character_*.json` - Character stats, active quests, skills, NPC favor levels
+- `*_items_*.json` - Inventory and storage items
+- `Player.log` - Live game log used for vendor auto-capture
+
+**CDN Data** (fetched automatically):
+- Quest, item, NPC, and storage vault definitions from `https://cdn.projectgorgon.com/v457/data/`
 
 ## Notes
 
-- CDN data is cached in-memory during the session
-- Page refresh clears cache
+- No installation, build step, or local server required — vanilla HTML/JS only
+- CDN data is cached in-memory for the session; page refresh clears it
+- Folder/file handles are stored in IndexedDB so the browser can reuse them without re-prompting (within the same session)
+- Vendor tracker data (remaining gold, reset timers) is stored in localStorage

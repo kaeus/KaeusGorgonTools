@@ -23,7 +23,7 @@
             <div class="control-row">
                 <label for="searchPattern">Search Pattern:</label>
                 <div>
-                    <input type="text" id="searchPattern" placeholder="[NPC Chatter] Ursula" value="[NPC Chatter] Ursula">
+                    <input type="text" id="searchPattern" placeholder="e.g. [NPC Chatter] Ursula">
                     <div class="help-text">Pattern to watch for in chat logs (case-sensitive)</div>
                 </div>
             </div>
@@ -296,7 +296,6 @@
 
                     // Check if line matches pattern
                     const isMatch = line.includes(this.searchPattern);
-                    const isNpcChatter = line.includes('[NPC Chatter]');
 
                     if (isMatch) {
                         this.matchCount++;
@@ -312,7 +311,6 @@
                     const lineEl = document.createElement('div');
                     lineEl.className = 'chat-line';
                     if (isMatch) lineEl.classList.add('matched');
-                    else if (isNpcChatter) lineEl.classList.add('npc-chatter');
                     lineEl.textContent = line;
 
                     // Add to display
@@ -381,6 +379,21 @@
 
         // Initialize chat watcher
         const chatWatcher = new ChatWatcher();
+
+        // Restore saved ChatLogs folder if permission already granted this session
+        (async () => {
+            const saved = await chatWatcher.getSavedDirectoryHandle();
+            if (!saved) return;
+            try {
+                const perm = await saved.queryPermission({ mode: 'read' });
+                if (perm === 'granted') {
+                    chatWatcher.chatLogsDirHandle = saved;
+                    const btn = document.getElementById('selectChatFolderBtn');
+                    btn.textContent = '✓ Folder Selected';
+                    btn.style.background = '#28a745';
+                }
+            } catch { /* stale handle, ignore */ }
+        })();
 
         // Stop watching when page unloads
         window.addEventListener('beforeunload', () => {

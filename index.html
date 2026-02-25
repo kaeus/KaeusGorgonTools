@@ -96,6 +96,10 @@
         </div>
 
         <div id="stores" class="tab-content stores-browser">
+            <div class="player-log-bar">
+                <button id="selectPlayerLogBtn" class="btn-secondary player-log-btn" onclick="selectPlayerLogFile()">📋 Watch Player.log</button>
+                <span id="playerLogStatus" class="player-log-status">Select Player.log to auto-capture vendor data when you open shops in-game.</span>
+            </div>
             <div id="storeList"></div>
         </div>
     </div>
@@ -111,15 +115,6 @@
                 this.cdnItemsData = null;
                 this.storageVaultsData = null;
                 this.cdnBaseUrl = 'https://cdn.projectgorgon.com/v457/data/';
-            }
-
-            async loadCharacterFromAPI() {
-                const response = await fetch('/api/character');
-                if (!response.ok) {
-                    throw new Error(`Failed to load character data: ${response.statusText}`);
-                }
-                this.characterData = await response.json();
-                return this.characterData;
             }
 
             async loadCharacterFile(file) {
@@ -215,15 +210,6 @@
                     return null;
                 }
                 return this.npcsData[npcId].Name || npcId;
-            }
-
-            async loadItemsFromAPI() {
-                const response = await fetch('/api/items');
-                if (!response.ok) {
-                    throw new Error(`Failed to load items data: ${response.statusText}`);
-                }
-                this.itemsData = await response.json();
-                return this.itemsData;
             }
 
             async resolveReportsDir(dirHandle) {
@@ -856,14 +842,25 @@
             }
         }
 
+        function loadVendorData() {
+            try { return JSON.parse(localStorage.getItem('gorgon-vendor-data') || '{}'); }
+            catch { return {}; }
+        }
+
+        function saveVendorData(data) {
+            localStorage.setItem('gorgon-vendor-data', JSON.stringify(data));
+        }
+
         // Regions to pin to the top of the Stores list (in order), rest sort alphabetically
-        const STORE_PINNED_REGIONS = ['Serbule', 'Red Wing Casino'];
+        const STORE_PINNED_REGIONS = ['Serbule', 'Red Wing Casino', 'Eltibule'];
 
         // Store Browser
         class StoreBrowser {
             constructor(dataLoader) {
                 this.dataLoader = dataLoader;
                 this.storeNPCs = [];
+                this.vendorData = loadVendorData();
+                this.resetTicker = null;
 
                 // Canonical favor level ordering (low → high)
                 this.FAVOR_ORDER = [
@@ -876,6 +873,7 @@
                 if (!this.dataLoader.npcsData) return;
 
                 this.storeNPCs = [];
+                this.vendorData = loadVendorData();
 
                 for (const [key, npc] of Object.entries(this.dataLoader.npcsData)) {
                     if (!npc.Services || !Array.isArray(npc.Services)) continue;
@@ -883,9 +881,10 @@
                     const storeService = npc.Services.find(s => s.Type === 'Store');
                     if (!storeService) continue;
                     if (!storeService.CapIncreases || storeService.CapIncreases.length === 0) continue;
+
                     // Skip vendors with no buy categories (entries only have level:value, not level:value:types)
                     const hasBuyTypes = storeService.CapIncreases.some(line => (line.match(/:/g) || []).length >= 2);
-                    if (!hasBuyTypes) continue;
+                    // if (!hasBuyTypes) continue;
 
                     // Match character favor level — character stores NPC keys like "NPC_CharlesThompson"
                     const charNPC = this.dataLoader.characterData?.NPCs?.[key];
@@ -938,6 +937,7 @@
                     .join('');
 
                 this.attachHandlers();
+                this.startResetTicker();
             }
 
             renderRegionAccordion(region, npcs) {
@@ -962,6 +962,7 @@
                                             <th>Merchant</th>
                                             <th>Favor</th>
                                             <th>Cap</th>
+                                            <th>Resets</th>
                                             <th>Buys</th>
                                             <th></th>
                                         </tr>
@@ -976,13 +977,165 @@
                 `;
             }
 
+            formatTimeRemaining(ms) {
+                if (ms <= 0) return 'Ready';
+                const s = Math.floor(ms / 1000);
+                const d = Math.floor(s / 86400);
+                const h = Math.floor((s % 86400) / 3600);
+                const m = Math.floor((s % 3600) / 60);
+                const parts = [];
+                if (d > 0) parts.push(`${d}d`);
+                if (h > 0) parts.push(`${h}h`);
+                if (m > 0 || parts.length === 0) parts.push(`${m}m`);
+                return parts.join(' ');
+            }
+
+            updateRowCells(row, key) {
+                const tracked = this.vendorData[key] || {};
+                const remaining = tracked.remaining !== undefined ? tracked.remaining : null;
+                const resetAt = tracked.resetAt || null;
+
+                const entry = this.storeNPCs.find(e => e.key === key);
+                if (!entry) return;
+                const parsedCaps = this.parseCaps(entry.storeService).filter(p => p.favorLevel !== 'Despised');
+                const currentCap = entry.favorLevel ? parsedCaps.find(p => p.favorLevel === entry.favorLevel) : null;
+
+                const capCell = row.querySelector('.col-cap');
+                if (currentCap) {
+                    if (remaining !== null) {
+                        const pct = remaining / currentCap.cap;
+                        const cls = pct > 0.5 ? 'remaining-high' : pct > 0.2 ? 'remaining-med' : 'remaining-low';
+                        capCell.innerHTML = `<span class="${cls}">${remaining.toLocaleString()}g</span> / ${currentCap.cap.toLocaleString()}g`;
+                    } else {
+                        capCell.innerHTML = `💰 ${currentCap.cap.toLocaleString()}g`;
+                    }
+                    capCell.className = 'col-cap';
+                }
+
+                const resetCell = row.querySelector('.col-reset');
+                if (resetAt) {
+                    const ms = resetAt - Date.now();
+                    if (ms <= 0) {
+                        resetCell.textContent = 'Ready';
+                        resetCell.className = 'col-reset reset-ready';
+                    } else {
+                        resetCell.textContent = this.formatTimeRemaining(ms);
+                        resetCell.className = 'col-reset';
+                    }
+                } else {
+                    resetCell.textContent = '';
+                    resetCell.className = 'col-reset';
+                }
+            }
+
+            startResetTicker() {
+                if (this.resetTicker) clearInterval(this.resetTicker);
+                this.resetTicker = setInterval(() => {
+                    const container = document.getElementById('storeList');
+                    if (!container) return;
+                    container.querySelectorAll('tr[data-npc-key]').forEach(row => {
+                        const key = row.getAttribute('data-npc-key');
+                        const tracked = this.vendorData[key];
+                        if (!tracked?.resetAt) return;
+                        const resetCell = row.querySelector('.col-reset');
+                        if (!resetCell) return;
+                        const ms = tracked.resetAt - Date.now();
+                        if (ms <= 0) {
+                            resetCell.textContent = 'Ready';
+                            resetCell.className = 'col-reset reset-ready';
+                        } else {
+                            resetCell.textContent = this.formatTimeRemaining(ms);
+                            resetCell.className = 'col-reset';
+                        }
+                    });
+                }, 30000);
+            }
+
+            findNPCKeyByInternalKey(internalKey) {
+                if (!internalKey) return null;
+                // Direct key match — most reliable, no CDN field guessing needed
+                return this.storeNPCs.some(en => en.key === internalKey) ? internalKey : null;
+            }
+
+            findNPCKeyById(npcId) {
+                if (npcId == null) return null;
+                const id = Number(npcId);
+                // CDN npc objects may use various field names for their numeric ID
+                const found = this.storeNPCs.find(en =>
+                    en.npc.ID === id || en.npc.NPCID === id || en.npc.NpcId === id
+                );
+                return found ? found.key : null;
+            }
+
+            findNPCKeyByDescription(desc) {
+                if (!desc) return null;
+                // Match against the vendor's store service description
+                const found = this.storeNPCs.find(en =>
+                    (en.storeService?.ServiceDescription === desc) ||
+                    (en.npc.Services || []).some(s =>
+                        s.ServiceDescription === desc || s.Description === desc
+                    )
+                );
+                return found ? found.key : null;
+            }
+
+            findNPCKeyByName(displayName) {
+                if (!displayName) return null;
+                const lower = displayName.toLowerCase();
+                let found = this.storeNPCs.find(en => en.npc.Name === displayName);
+                if (found) return found.key;
+                found = this.storeNPCs.find(en => (en.npc.Name || '').toLowerCase() === lower);
+                return found ? found.key : null;
+            }
+
+            applyVendorCaptures(captures) {
+                // Build a key→row map for in-place DOM updates
+                const rowMap = {};
+                document.querySelectorAll('#storeList tr[data-npc-key]').forEach(r => {
+                    rowMap[r.getAttribute('data-npc-key')] = r;
+                });
+
+                let updated = false;
+                for (const capture of Object.values(captures)) {
+                    // Try matching strategies in priority order
+                    const key =
+                        this.findNPCKeyByInternalKey(capture.npcInternalKey) ||
+                        this.findNPCKeyById(capture.npcId) ||
+                        this.findNPCKeyByDescription(capture.description) ||
+                        this.findNPCKeyByName(capture.vendorName);
+                    if (!key) continue;
+
+                    const existing = this.vendorData[key] || {};
+                    const capAt = capture.capturedAt || 0;
+                    if (capAt <= (existing.capturedAt || 0)) continue;
+
+                    this.vendorData[key] = {
+                        ...existing,
+                        remaining: capture.remaining != null ? Math.round(capture.remaining) : existing.remaining,
+                        capturedAt: capAt,
+                    };
+                    if (capture.resetAt) {
+                        this.vendorData[key].resetAt = capture.resetAt;
+                    }
+
+                    if (rowMap[key]) this.updateRowCells(rowMap[key], key);
+                    updated = true;
+
+                    const label = capture.vendorName || `NPC#${capture.npcId}`;
+                    const remStr = capture.remaining != null ? `${Math.round(capture.remaining)}g` : '?';
+                    showCaptureToast(`Auto-filled: ${label} — ${remStr} remaining`);
+                }
+
+                if (updated) saveVendorData(this.vendorData);
+            }
+
             parseCaps(storeService) {
                 return (storeService.CapIncreases || []).map(line => {
                     const colonIdx = line.indexOf(':');
                     const secondColonIdx = line.indexOf(':', colonIdx + 1);
                     const fLevel = line.substring(0, colonIdx);
-                    const cap = parseInt(line.substring(colonIdx + 1, secondColonIdx)) || 0;
-                    const buyTypes = secondColonIdx >= 0 ? line.substring(secondColonIdx + 1).split(',') : [];
+                    const cap = (secondColonIdx >= 0 ? parseInt(line.substring(colonIdx + 1, secondColonIdx)) : parseInt(line.substring(colonIdx + 1))) || 0;
+                    const buyTypes = secondColonIdx >= 0 ? line.substring(secondColonIdx + 1).split(',') : ['Any'];
                     return { favorLevel: fLevel, cap, buyTypes };
                 });
             }
@@ -991,15 +1144,10 @@
                 const { key, npc, storeService, favorLevel } = entry;
                 const name = npc.Name || key;
 
-                // Parse and strip Despised rows
                 const parsedCaps = this.parseCaps(storeService).filter(p => p.favorLevel !== 'Despised');
-
-                // Find current cap entry
                 const currentCap = favorLevel ? parsedCaps.find(p => p.favorLevel === favorLevel) : null;
-                const capText = currentCap ? `💰 ${currentCap.cap.toLocaleString()}g` : '—';
                 const capClass = currentCap ? '' : 'no-cap';
 
-                // Buy types: use first entry at Friends or above, fallback to first available
                 const friendsIdx = this.FAVOR_ORDER.indexOf('Friends');
                 const refCap = parsedCaps.find(p => this.FAVOR_ORDER.indexOf(p.favorLevel) >= friendsIdx) || parsedCaps[0];
                 const buysText = refCap ? refCap.buyTypes.join(', ') : '';
@@ -1008,22 +1156,53 @@
                     ? `<span class="favor-badge favor-${favorLevel.toLowerCase()}">${favorLevel}</span>`
                     : `<span class="favor-badge favor-unknown">Not Met</span>`;
 
+                // Tracker data from localStorage
+                const tracked = this.vendorData[key] || {};
+                const remaining = tracked.remaining !== undefined ? tracked.remaining : null;
+                const resetAt = tracked.resetAt || null;
+
+                // Cap cell
+                let capHtml;
+                if (currentCap) {
+                    if (remaining !== null) {
+                        const pct = remaining / currentCap.cap;
+                        const cls = pct > 0.5 ? 'remaining-high' : pct > 0.2 ? 'remaining-med' : 'remaining-low';
+                        capHtml = `<span class="${cls}">${remaining.toLocaleString()}g</span> / ${currentCap.cap.toLocaleString()}g`;
+                    } else {
+                        capHtml = `💰 ${currentCap.cap.toLocaleString()}g`;
+                    }
+                } else {
+                    capHtml = '—';
+                }
+
+                // Reset cell
+                let resetHtml = '', resetColClass = 'col-reset';
+                if (resetAt) {
+                    const ms = resetAt - Date.now();
+                    if (ms <= 0) { resetHtml = 'Ready'; resetColClass += ' reset-ready'; }
+                    else resetHtml = this.formatTimeRemaining(ms);
+                }
+
                 return `
-                    <tr>
+                    <tr data-npc-key="${key}">
                         <td class="col-name"><a href="https://wiki.projectgorgon.com/wiki/?search=${encodeURIComponent(name)}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none;" onmouseover="this.style.color='#667eea';this.style.textDecoration='underline'" onmouseout="this.style.color='inherit';this.style.textDecoration='none'">${name}</a></td>
                         <td class="col-favor">${favorBadgeHtml}</td>
-                        <td class="col-cap ${capClass}">${capText}</td>
+                        <td class="col-cap ${capClass}">${capHtml}</td>
+                        <td class="${resetColClass}">${resetHtml}</td>
                         <td class="col-buys">${buysText}</td>
-                        <td class="col-tooltip">
-                            <div class="tooltip-container">
-                                <button class="tooltip-btn">?</button>
-                                <div class="tooltip-content">
-                                    <div class="tooltip-title">All Favor Tiers</div>
-                                    ${this.renderCapTable(parsedCaps, favorLevel)}
-                                    ${npc.Preferences && npc.Preferences.length > 0 ? `
-                                        <div class="tooltip-title tooltip-title-divider">Gift Preferences</div>
-                                        ${this.renderPreferencesTable(npc.Preferences)}
-                                    ` : ''}
+                        <td class="col-actions">
+                            <div style="display:flex;gap:4px;justify-content:flex-end;align-items:center;">
+                                <button class="tracker-btn" title="Track remaining/reset">✏</button>
+                                <div class="tooltip-container">
+                                    <button class="tooltip-btn">?</button>
+                                    <div class="tooltip-content">
+                                        <div class="tooltip-title">All Favor Tiers</div>
+                                        ${this.renderCapTable(parsedCaps, favorLevel)}
+                                        ${npc.Preferences && npc.Preferences.length > 0 ? `
+                                            <div class="tooltip-title tooltip-title-divider">Gift Preferences</div>
+                                            ${this.renderPreferencesTable(npc.Preferences)}
+                                        ` : ''}
+                                    </div>
                                 </div>
                             </div>
                         </td>
@@ -1135,6 +1314,198 @@
                         });
                     }
                 }, { capture: false });
+
+                // Tracker pencil button — open modal
+                container.querySelectorAll('.tracker-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const row = btn.closest('tr');
+                        const key = row.getAttribute('data-npc-key');
+                        const entry = this.storeNPCs.find(en => en.key === key);
+                        const tracked = this.vendorData[key] || {};
+                        const remaining = tracked.remaining !== undefined ? tracked.remaining : '';
+                        let days = '', hours = '', mins = '';
+                        if (tracked.resetAt && tracked.resetAt > Date.now()) {
+                            const s = Math.floor((tracked.resetAt - Date.now()) / 1000);
+                            days  = Math.floor(s / 86400) || '';
+                            hours = Math.floor((s % 86400) / 3600) || '';
+                            mins  = Math.floor((s % 3600) / 60) || '';
+                        }
+                        document.getElementById('trackerModalTitle').textContent = entry?.npc?.Name || key;
+                        document.getElementById('trackerModalRemaining').value = remaining;
+                        document.getElementById('trackerModalDays').value = days;
+                        document.getElementById('trackerModalHours').value = hours;
+                        document.getElementById('trackerModalMins').value = mins;
+                        this._modalKey = key;
+                        this._modalRow = row;
+                        document.getElementById('trackerModal').style.display = 'flex';
+                        document.getElementById('trackerModalRemaining').focus();
+                    });
+                });
+
+                // Modal close / save / clear — assigned with onclick so re-renders don't stack listeners
+                document.getElementById('trackerModalCloseBtn').onclick = () => {
+                    document.getElementById('trackerModal').style.display = 'none';
+                };
+
+                document.getElementById('trackerModalSave').onclick = () => {
+                    const remainingVal = document.getElementById('trackerModalRemaining').value;
+                    const d = parseInt(document.getElementById('trackerModalDays').value)  || 0;
+                    const h = parseInt(document.getElementById('trackerModalHours').value) || 0;
+                    const m = parseInt(document.getElementById('trackerModalMins').value)  || 0;
+                    const remaining = remainingVal !== '' ? parseInt(remainingVal) : undefined;
+                    const totalMs = (d * 86400 + h * 3600 + m * 60) * 1000;
+                    const resetAt = totalMs > 0 ? Date.now() + totalMs : null;
+                    this.vendorData[this._modalKey] = { remaining, resetAt };
+                    saveVendorData(this.vendorData);
+                    this.updateRowCells(this._modalRow, this._modalKey);
+                    document.getElementById('trackerModal').style.display = 'none';
+                };
+
+                document.getElementById('trackerModalClear').onclick = () => {
+                    delete this.vendorData[this._modalKey];
+                    saveVendorData(this.vendorData);
+                    this.updateRowCells(this._modalRow, this._modalKey);
+                    document.getElementById('trackerModal').style.display = 'none';
+                };
+            }
+        }
+
+        // Show a brief non-blocking toast when vendor captures auto-fill data
+        function showCaptureToast(message) {
+            const toast = document.getElementById('captureToast');
+            if (!toast) return;
+            toast.textContent = message;
+            toast.style.display = 'block';
+            clearTimeout(toast._hideTimer);
+            toast._hideTimer = setTimeout(() => { toast.style.display = 'none'; }, 4000);
+        }
+
+        // ── Player.log Watcher ────────────────────────────────────────────────
+
+        let playerLogFileHandle = null;
+        let playerLogOffset = 0;
+        let playerLogPollTimer = null;
+
+        async function savePlayerLogHandle(handle) {
+            try {
+                const db = await openHandlesDB();
+                const tx = db.transaction('handles', 'readwrite');
+                tx.objectStore('handles').put(handle, 'playerLogFile');
+                await new Promise(resolve => { tx.oncomplete = resolve; });
+            } catch (e) { /* non-critical */ }
+        }
+
+        async function getSavedPlayerLogHandle() {
+            try {
+                const db = await openHandlesDB();
+                return await new Promise(resolve => {
+                    const req = db.transaction('handles', 'readonly').objectStore('handles').get('playerLogFile');
+                    req.onsuccess = (e) => resolve(e.target.result || null);
+                    req.onerror = () => resolve(null);
+                });
+            } catch (e) { return null; }
+        }
+
+        // Maps numeric npcId → internal key e.g. 12485 → "NPC_Ragabir"
+        // Populated by ProcessStartInteraction lines that precede vendor screen opens.
+        const npcIdToKeyMap = {};
+
+        const RE_START_INTERACTION = /LocalPlayer: ProcessStartInteraction\((\d+),.*?"([^"]+)"\)/;
+        const RE_VENDOR_SCREEN     = /LocalPlayer: ProcessVendorScreen\((\d+), (\w+), (\d+), (\d+), (\d+), "([^"]*)"/;
+
+        async function pollPlayerLog() {
+            if (!playerLogFileHandle) return;
+            try {
+                const file = await playerLogFileHandle.getFile();
+                if (file.size > playerLogOffset) {
+                    const newBytes = file.size - playerLogOffset;
+                    const text = await file.slice(playerLogOffset).text();
+                    const lines = text.split('\n');
+                    let vendorLinesFound = 0;
+
+                    for (const line of lines) {
+                        // Build the id→key map from interaction lines
+                        const im = RE_START_INTERACTION.exec(line);
+                        if (im) {
+                            const [, id, internalKey] = im;
+                            npcIdToKeyMap[parseInt(id)] = internalKey;
+                            console.log(`[player.log] Mapped NPC#${id} → ${internalKey}`);
+                            continue;
+                        }
+
+                        // Parse vendor screen events
+                        const vm = RE_VENDOR_SCREEN.exec(line);
+                        if (vm) {
+                            const [, npcId, favorLevel, remaining, resetAt, cap, description] = vm;
+                            const id = parseInt(npcId);
+                            const internalKey = npcIdToKeyMap[id] || null;
+                            const capture = {
+                                npcId:       id,
+                                npcInternalKey: internalKey,
+                                favorLevel,
+                                remaining:   parseInt(remaining),
+                                resetAt:     parseInt(resetAt),
+                                cap:         parseInt(cap),
+                                description,
+                                capturedAt:  Date.now(),
+                            };
+                            vendorLinesFound++;
+                            console.log(
+                                `[vendor] NPC#${id} (${internalKey || '?'}) ${favorLevel}` +
+                                ` remaining=${capture.remaining} cap=${capture.cap}` +
+                                ` resetAt=${new Date(capture.resetAt).toLocaleString()}`,
+                                capture
+                            );
+                            storeBrowser.applyVendorCaptures({ [id]: capture });
+                        }
+                    }
+
+                    if (vendorLinesFound || newBytes > 0) {
+                        console.log(`[player.log] +${newBytes}B, ${lines.length} lines, ${vendorLinesFound} vendor event(s)`);
+                    }
+                }
+                playerLogOffset = file.size;
+            } catch (e) {
+                console.warn('[player.log] poll error:', e);
+            }
+        }
+
+        function startPlayerLogWatcher() {
+            if (playerLogPollTimer) clearInterval(playerLogPollTimer);
+            playerLogPollTimer = setInterval(pollPlayerLog, 2000);
+            pollPlayerLog(); // immediate first poll
+        }
+
+        function updatePlayerLogStatus(watching) {
+            const btn = document.getElementById('selectPlayerLogBtn');
+            const status = document.getElementById('playerLogStatus');
+            if (!btn) return;
+            if (watching) {
+                btn.textContent = '● Player.log';
+                btn.classList.add('player-log-active');
+                if (status) status.textContent = 'Watching — open a vendor shop in-game to capture data.';
+            } else {
+                btn.textContent = '📋 Watch Player.log';
+                btn.classList.remove('player-log-active');
+                if (status) status.textContent = 'Select Player.log to auto-capture vendor data when you open shops in-game.';
+            }
+        }
+
+        async function selectPlayerLogFile() {
+            try {
+                const pickerOpts = { multiple: false, id: 'gorgon-playerlog' };
+                const saved = await getSavedPlayerLogHandle();
+                if (saved) pickerOpts.startIn = saved;
+                const [handle] = await window.showOpenFilePicker(pickerOpts);
+                playerLogFileHandle = handle;
+                await savePlayerLogHandle(handle);
+                // Start from end of file — only capture new events going forward
+                playerLogOffset = (await handle.getFile()).size;
+                startPlayerLogWatcher();
+                updatePlayerLogStatus(true);
+            } catch (e) {
+                if (e.name !== 'AbortError') alert('Error selecting Player.log: ' + e.message);
             }
         }
 
@@ -1363,8 +1734,6 @@
         document.getElementById('reloadBtn').addEventListener('click', () => {
             if (reportsDirectoryHandle) {
                 loadAllDataFromDirectory(reportsDirectoryHandle);
-            } else {
-                loadAllDataFromAPI();
             }
         });
 
@@ -1376,6 +1745,38 @@
 
         // Auto-load data on page load
         loadAllDataFromAPI();
+
+        // Restore saved handles if permission was already granted this session
+        (async () => {
+            const [savedFolder, savedLog] = await Promise.all([
+                getSavedDirectoryHandle(),
+                getSavedPlayerLogHandle(),
+            ]);
+
+            if (savedFolder) {
+                try {
+                    const perm = await savedFolder.queryPermission({ mode: 'read' });
+                    if (perm === 'granted') {
+                        reportsDirectoryHandle = savedFolder;
+                        const btn = document.getElementById('selectFolderBtn');
+                        if (btn) { btn.textContent = '✓ Folder Selected'; btn.style.background = '#d4edda'; btn.style.color = '#155724'; btn.style.borderColor = '#28a745'; }
+                        loadAllDataFromDirectory(savedFolder);
+                    }
+                } catch { /* stale handle, ignore */ }
+            }
+
+            if (savedLog) {
+                try {
+                    const perm = await savedLog.queryPermission({ mode: 'read' });
+                    if (perm === 'granted') {
+                        playerLogFileHandle = savedLog;
+                        playerLogOffset = (await savedLog.getFile()).size;
+                        startPlayerLogWatcher();
+                        updatePlayerLogStatus(true);
+                    }
+                } catch { /* stale handle, ignore */ }
+            }
+        })();
 
         // Show empty state initially
         document.getElementById('questList').innerHTML = `
@@ -1401,6 +1802,35 @@
                 <p>Click Reload Game Data to load merchant stores.</p>
             </div>
         `;
+        // Close tracker modal on Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') document.getElementById('trackerModal').style.display = 'none';
+        });
     </script>
+
+    <div id="trackerModal" class="tracker-modal-overlay" style="display:none;">
+        <div class="tracker-modal">
+            <div class="tracker-modal-header">
+                <span class="tracker-modal-title" id="trackerModalTitle">Track Vendor</span>
+                <button class="tracker-modal-close" id="trackerModalCloseBtn">✕</button>
+            </div>
+            <div class="tracker-modal-body">
+                <div class="tracker-popup-label" style="margin-top:0">Remaining gold</div>
+                <input type="number" id="trackerModalRemaining" class="tracker-remaining-input" placeholder="e.g. 5000" min="0">
+                <div class="tracker-popup-label">Resets in</div>
+                <div class="tracker-reset-inputs">
+                    <input type="number" id="trackerModalDays"  placeholder="0" min="0"> d
+                    <input type="number" id="trackerModalHours" placeholder="0" min="0" max="23"> h
+                    <input type="number" id="trackerModalMins"  placeholder="0" min="0" max="59"> m
+                </div>
+            </div>
+            <div class="tracker-modal-footer">
+                <button class="tracker-save-btn" id="trackerModalSave">Save</button>
+                <button class="tracker-clear-btn" id="trackerModalClear">Clear</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="captureToast" class="capture-toast" style="display:none;"></div>
 </body>
 </html>
