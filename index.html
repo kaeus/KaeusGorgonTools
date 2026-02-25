@@ -51,6 +51,7 @@
             <div class="tab active" data-tab="quests">📜 Quests</div>
             <div class="tab" data-tab="inventory">🎒 Inventory</div>
             <div class="tab" data-tab="stores">🛒 Vendors</div>
+            <div class="tab" data-tab="prices">💰 Prices</div>
         </div>
 
         <div id="quests" class="tab-content active quest-browser">
@@ -93,6 +94,14 @@
             </div>
 
             <div id="inventoryList" class="quest-list"></div>
+        </div>
+
+        <div id="prices" class="tab-content vendor-price-browser">
+            <div class="price-toolbar">
+                <input type="text" id="priceSearch" class="price-search" placeholder="🔍 Search tracked items...">
+                <button class="btn-add-item" id="addItemBtn">+ Add Item</button>
+            </div>
+            <div id="priceList"></div>
         </div>
 
         <div id="stores" class="tab-content stores-browser">
@@ -852,7 +861,7 @@
         }
 
         // Regions to pin to the top of the Stores list (in order), rest sort alphabetically
-        const STORE_PINNED_REGIONS = ['Serbule', 'Red Wing Casino', 'Eltibule'];
+        const STORE_PINNED_REGIONS = ['Serbule', 'Red Wing Casino', 'Eltibule', 'Serbule Hills'];
 
         // Store Browser
         class StoreBrowser {
@@ -1121,7 +1130,7 @@
                     if (rowMap[key]) this.updateRowCells(rowMap[key], key);
                     updated = true;
 
-                    const label = capture.vendorName || `NPC#${capture.npcId}`;
+                    const label = capture.vendorName || `NPC#${capture.npcId} (${key})`;
                     const remStr = capture.remaining != null ? `${Math.round(capture.remaining)}g` : '?';
                     showCaptureToast(`Auto-filled: ${label} — ${remStr} remaining`);
                 }
@@ -1172,7 +1181,11 @@
                         capHtml = `💰 ${currentCap.cap.toLocaleString()}g`;
                     }
                 } else {
-                    capHtml = '—';
+                    if (remaining != null) {
+                        capHtml = `<span class="remaining-unknown">${remaining.toLocaleString()}g / ${currentCap ? currentCap.toLocaleString() + 'g' : 'Unknown Cap'}</span>`;
+                    } else {
+                        capHtml = '—';
+                    }
                 }
 
                 // Reset cell
@@ -1509,11 +1522,316 @@
             }
         }
 
+        // ── Vendor Price Tracker ──────────────────────────────────────────────
+
+        function generateId() {
+            return crypto.randomUUID ? crypto.randomUUID()
+                : Math.random().toString(36).slice(2) + Date.now().toString(36);
+        }
+
+        function loadPriceTrackerData() {
+            try { return JSON.parse(localStorage.getItem('gorgon-price-tracker') || '{"items":{}}'); }
+            catch { return { items: {} }; }
+        }
+
+        function savePriceTrackerData(data) {
+            localStorage.setItem('gorgon-price-tracker', JSON.stringify(data));
+        }
+
+        class VendorPriceTracker {
+            constructor() {
+                this.data = loadPriceTrackerData();
+                this.searchQuery = '';
+                this.expandedItems = new Set();
+                this._editingItemId = null;
+                this._editingEntryId = null;
+            }
+
+            getFilteredItems() {
+                const q = this.searchQuery.toLowerCase();
+                return Object.values(this.data.items)
+                    .filter(item => !q || item.name.toLowerCase().includes(q))
+                    .sort((a, b) => a.name.localeCompare(b.name));
+            }
+
+            addItem(name) {
+                const id = generateId();
+                this.data.items[id] = { id, name: name.trim(), entries: [] };
+                savePriceTrackerData(this.data);
+                this.expandedItems.add(id);
+                this.render();
+            }
+
+            deleteItem(id) {
+                const name = this.data.items[id]?.name || 'this item';
+                if (!confirm(`Delete "${name}" and all its price data?`)) return;
+                delete this.data.items[id];
+                this.expandedItems.delete(id);
+                savePriceTrackerData(this.data);
+                this.render();
+            }
+
+            addEntry(itemId, { location, price, timestamp }) {
+                const entry = { id: generateId(), location, price, timestamp, retired: false };
+                this.data.items[itemId].entries.unshift(entry);
+                savePriceTrackerData(this.data);
+                this.render();
+            }
+
+            editEntry(itemId, entryId, { location, price, timestamp }) {
+                const entry = this.data.items[itemId].entries.find(e => e.id === entryId);
+                if (entry) { entry.location = location; entry.price = price; entry.timestamp = timestamp; }
+                savePriceTrackerData(this.data);
+                this.render();
+            }
+
+            retireEntry(itemId, entryId) {
+                const entry = this.data.items[itemId].entries.find(e => e.id === entryId);
+                if (entry) entry.retired = !entry.retired;
+                savePriceTrackerData(this.data);
+                this.render();
+            }
+
+            deleteEntry(itemId, entryId) {
+                const item = this.data.items[itemId];
+                item.entries = item.entries.filter(e => e.id !== entryId);
+                savePriceTrackerData(this.data);
+                this.render();
+            }
+
+            calcStats(entries) {
+                const active = entries.filter(e => !e.retired);
+                if (!active.length) return { avgPrice: null, avgAgeMs: null, count: 0, totalCount: entries.length };
+                const avgPrice = active.reduce((s, e) => s + e.price, 0) / active.length;
+                const now = Date.now();
+                const avgAgeMs = active.reduce((s, e) => s + (now - e.timestamp), 0) / active.length;
+                const lowPrice = Math.min(...active.map(e => e.price));
+                return { avgPrice, avgAgeMs, count: active.length, totalCount: entries.length, lowPrice };
+            }
+
+            formatAge(ms) {
+                if (ms < 0) ms = 0;
+                const totalMin = Math.floor(ms / 60000);
+                const d = Math.floor(totalMin / 1440);
+                const h = Math.floor((totalMin % 1440) / 60);
+                const m = totalMin % 60;
+                if (d > 0) return h > 0 ? `${d}d ${h}h` : `${d}d`;
+                if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+                return `${m}m`;
+            }
+
+            formatTimestamp(ts) {
+                return new Date(ts).toLocaleString(undefined, {
+                    month: 'short', day: 'numeric', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                });
+            }
+
+            escHtml(str) {
+                return String(str)
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            }
+
+            search(query) {
+                this.searchQuery = query;
+                this.render();
+            }
+
+            render() {
+                const container = document.getElementById('priceList');
+                if (!container) return;
+                const allItems = Object.values(this.data.items);
+                const filtered = this.getFilteredItems();
+
+                if (allItems.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">💰</div>
+                            <h3>No items tracked yet</h3>
+                            <p>Click <strong>+ Add Item</strong> to start tracking player vendor prices.</p>
+                        </div>`;
+                    return;
+                }
+
+                if (filtered.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">🔍</div>
+                            <h3>No items match your search</h3>
+                            <p>Try a different search term.</p>
+                        </div>`;
+                    return;
+                }
+
+                container.innerHTML = filtered.map(item => this.renderItem(item)).join('');
+                this.attachHandlers();
+            }
+
+            renderItem(item) {
+                const stats = this.calcStats(item.entries);
+                const isExpanded = this.expandedItems.has(item.id);
+
+                let statsHtml;
+                if (stats.count > 0) {
+                    const countLabel = stats.totalCount > stats.count
+                        ? `${stats.count}/${stats.totalCount} entries`
+                        : `${stats.count} entr${stats.count === 1 ? 'y' : 'ies'}`;
+                    statsHtml = `
+                        <span class="price-stat">Low: <strong>${Math.round(stats.lowPrice).toLocaleString()}g</strong></span>
+                        <span class="price-stat">Avg: <strong>${Math.round(stats.avgPrice).toLocaleString()}g</strong></span>
+                        <span class="price-stat">Avg age: <strong>${this.formatAge(stats.avgAgeMs)}</strong></span>
+                        <span class="price-stat">${countLabel}</span>`;
+                } else if (stats.totalCount > 0) {
+                    statsHtml = `<span class="price-stat" style="font-style:italic;">${stats.totalCount} retired</span>`;
+                } else {
+                    statsHtml = `<span class="price-stat" style="font-style:italic;">No entries yet</span>`;
+                }
+
+                const entriesHtml = item.entries.length > 0
+                    ? `<table class="price-entries-table">
+                        <thead><tr>
+                            <th>Location</th>
+                            <th>Price</th>
+                            <th>Recorded</th>
+                            <th>Age</th>
+                            <th style="text-align:right">Actions</th>
+                        </tr></thead>
+                        <tbody>${item.entries.map(e => this.renderEntry(item.id, e)).join('')}</tbody>
+                       </table>`
+                    : `<div style="padding:14px 20px;color:#6c757d;font-style:italic;font-size:0.9em;">No price entries yet — click <strong>Add Entry</strong> to log a price.</div>`;
+
+                return `
+                    <div class="price-item-accordion" data-item-id="${item.id}">
+                        <div class="price-item-header${isExpanded ? ' expanded' : ''}" data-toggle-item="${item.id}">
+                            <span class="price-item-name">${this.escHtml(item.name)}</span>
+                            <div class="price-item-stats">${statsHtml}</div>
+                            <button class="price-item-delete-btn" data-delete-item="${item.id}" title="Delete item">✕</button>
+                            <span class="price-item-arrow">▼</span>
+                        </div>
+                        <div class="price-item-content${isExpanded ? ' expanded' : ''}">
+                            ${entriesHtml}
+                            <div class="price-add-entry-row">
+                                <button class="btn-add-entry" data-add-entry="${item.id}">+ Add Entry</button>
+                            </div>
+                        </div>
+                    </div>`;
+            }
+
+            renderEntry(itemId, entry) {
+                const age = this.formatAge(Date.now() - entry.timestamp);
+                const date = this.formatTimestamp(entry.timestamp);
+                const retiredClass = entry.retired ? ' price-entry-retired' : '';
+                const retireLabel = entry.retired ? 'Unretire' : 'Retire';
+                const retireBtnClass = entry.retired ? 'btn-unretire' : 'btn-retire';
+                return `
+                    <tr class="${retiredClass}">
+                        <td class="entry-location">${this.escHtml(entry.location || '—')}</td>
+                        <td class="entry-price">${entry.price.toLocaleString()}g</td>
+                        <td class="entry-date">${date}</td>
+                        <td class="entry-age">${age}</td>
+                        <td>
+                            <div class="entry-actions">
+                                <button class="entry-btn btn-edit"    data-edit-entry="${entry.id}"   data-item-id="${itemId}">Edit</button>
+                                <button class="entry-btn ${retireBtnClass}" data-retire-entry="${entry.id}" data-item-id="${itemId}">${retireLabel}</button>
+                                <button class="entry-btn btn-delete"  data-delete-entry="${entry.id}" data-item-id="${itemId}">Delete</button>
+                            </div>
+                        </td>
+                    </tr>`;
+            }
+
+            attachHandlers() {
+                const container = document.getElementById('priceList');
+
+                container.querySelectorAll('[data-toggle-item]').forEach(el => {
+                    el.addEventListener('click', (e) => {
+                        if (e.target.closest('[data-delete-item]')) return;
+                        const id = el.getAttribute('data-toggle-item');
+                        if (this.expandedItems.has(id)) this.expandedItems.delete(id);
+                        else this.expandedItems.add(id);
+                        this.render();
+                    });
+                });
+
+                container.querySelectorAll('[data-delete-item]').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.deleteItem(btn.getAttribute('data-delete-item'));
+                    });
+                });
+
+                container.querySelectorAll('[data-add-entry]').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        this._editingItemId = btn.getAttribute('data-add-entry');
+                        this._editingEntryId = null;
+                        this.openEntryModal();
+                    });
+                });
+
+                container.querySelectorAll('[data-edit-entry]').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        this._editingItemId = btn.getAttribute('data-item-id');
+                        this._editingEntryId = btn.getAttribute('data-edit-entry');
+                        this.openEntryModal();
+                    });
+                });
+
+                container.querySelectorAll('[data-retire-entry]').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        this.retireEntry(btn.getAttribute('data-item-id'), btn.getAttribute('data-retire-entry'));
+                    });
+                });
+
+                container.querySelectorAll('[data-delete-entry]').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        if (!confirm('Delete this price entry?')) return;
+                        this.deleteEntry(btn.getAttribute('data-item-id'), btn.getAttribute('data-delete-entry'));
+                    });
+                });
+            }
+
+            openEntryModal() {
+                const item = this.data.items[this._editingItemId];
+                const isEdit = !!this._editingEntryId;
+                const entry = isEdit ? item.entries.find(e => e.id === this._editingEntryId) : null;
+
+                document.getElementById('priceModalTitle').textContent =
+                    isEdit ? `Edit Entry — ${item.name}` : `Add Entry — ${item.name}`;
+                document.getElementById('priceModalLocation').value = entry ? entry.location : '';
+                document.getElementById('priceModalPrice').value = entry ? entry.price : '';
+
+                const ts = entry ? entry.timestamp : Date.now();
+                const dt = new Date(ts - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                document.getElementById('priceModalTimestamp').value = dt;
+
+                document.getElementById('priceEntryModal').style.display = 'flex';
+                document.getElementById('priceModalLocation').focus();
+            }
+
+            saveEntryModal() {
+                const location = document.getElementById('priceModalLocation').value.trim();
+                const price = parseFloat(document.getElementById('priceModalPrice').value);
+                const tsStr = document.getElementById('priceModalTimestamp').value;
+
+                if (isNaN(price) || price < 0) { alert('Please enter a valid price.'); return; }
+
+                const timestamp = tsStr ? new Date(tsStr).getTime() : Date.now();
+
+                if (this._editingEntryId) {
+                    this.editEntry(this._editingItemId, this._editingEntryId, { location, price, timestamp });
+                } else {
+                    this.addEntry(this._editingItemId, { location, price, timestamp });
+                }
+                document.getElementById('priceEntryModal').style.display = 'none';
+            }
+        }
+
         // Application initialization
         let dataLoader = new DataLoader();
         let questBrowser = new QuestBrowser(dataLoader);
         let inventoryBrowser = new InventoryBrowser(dataLoader);
         let storeBrowser = new StoreBrowser(dataLoader);
+        let vendorPriceTracker = new VendorPriceTracker();
         let reportsDirectoryHandle = null;
 
         function showStatus(message, type = 'loading') {
@@ -1685,7 +2003,7 @@
         // Handle hash changes (browser back/forward)
         function handleHashChange() {
             const hash = window.location.hash.slice(1); // Remove '#'
-            const validTabs = ['quests', 'inventory', 'stores', 'maps'];
+            const validTabs = ['quests', 'inventory', 'stores', 'prices', 'maps'];
 
             if (hash && validTabs.includes(hash)) {
                 switchTab(hash, false); // Don't update hash again to avoid loop
@@ -1695,7 +2013,7 @@
         // Initialize tab from URL hash on page load
         function initializeTabFromHash() {
             const hash = window.location.hash.slice(1);
-            const validTabs = ['quests', 'inventory', 'stores', 'maps'];
+            const validTabs = ['quests', 'inventory', 'stores', 'prices', 'maps'];
 
             if (hash && validTabs.includes(hash)) {
                 switchTab(hash, false);
@@ -1725,6 +2043,16 @@
             inventoryBrowser.search(e.target.value);
         });
 
+        document.getElementById('priceSearch').addEventListener('input', (e) => {
+            vendorPriceTracker.search(e.target.value);
+        });
+
+        document.getElementById('addItemBtn').addEventListener('click', () => {
+            document.getElementById('addItemName').value = '';
+            document.getElementById('addItemModal').style.display = 'flex';
+            document.getElementById('addItemName').focus();
+        });
+
         document.querySelectorAll('.tab').forEach(tab => {
             tab.addEventListener('click', () => {
                 switchTab(tab.getAttribute('data-tab'));
@@ -1735,6 +2063,32 @@
             if (reportsDirectoryHandle) {
                 loadAllDataFromDirectory(reportsDirectoryHandle);
             }
+        });
+
+        // Price tracker modal handlers — deferred until modals are in the DOM
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('addItemModalClose').onclick = () => {
+                document.getElementById('addItemModal').style.display = 'none';
+            };
+            document.getElementById('addItemSave').onclick = () => {
+                const name = document.getElementById('addItemName').value.trim();
+                if (!name) { alert('Please enter an item name.'); return; }
+                vendorPriceTracker.addItem(name);
+                document.getElementById('addItemModal').style.display = 'none';
+            };
+            document.getElementById('addItemName').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') document.getElementById('addItemSave').click();
+            });
+
+            document.getElementById('priceModalClose').onclick = () => {
+                document.getElementById('priceEntryModal').style.display = 'none';
+            };
+            document.getElementById('priceModalSave').onclick = () => {
+                vendorPriceTracker.saveEntryModal();
+            };
+            document.getElementById('priceModalPrice').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') document.getElementById('priceModalSave').click();
+            });
         });
 
         // Handle hash changes for tab navigation
@@ -1802,9 +2156,17 @@
                 <p>Click Reload Game Data to load merchant stores.</p>
             </div>
         `;
-        // Close tracker modal on Escape
+
+        // Render price tracker on load (uses localStorage, no data files needed)
+        vendorPriceTracker.render();
+
+        // Close modals on Escape
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') document.getElementById('trackerModal').style.display = 'none';
+            if (e.key === 'Escape') {
+                document.getElementById('trackerModal').style.display = 'none';
+                document.getElementById('priceEntryModal').style.display = 'none';
+                document.getElementById('addItemModal').style.display = 'none';
+            }
         });
     </script>
 
@@ -1832,5 +2194,51 @@
     </div>
 
     <div id="captureToast" class="capture-toast" style="display:none;"></div>
+
+    <!-- Add Item modal -->
+    <div id="addItemModal" class="tracker-modal-overlay" style="display:none;">
+        <div class="price-modal">
+            <div class="price-modal-header">
+                <span class="price-modal-title">Track New Item</span>
+                <button class="price-modal-close" id="addItemModalClose">✕</button>
+            </div>
+            <div class="price-modal-body">
+                <div>
+                    <label class="price-modal-label" for="addItemName">Item Name</label>
+                    <input type="text" id="addItemName" class="price-modal-input" placeholder="e.g. Saddled Horse">
+                </div>
+            </div>
+            <div class="price-modal-footer">
+                <button class="tracker-save-btn" id="addItemSave">Add Item</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add / Edit price entry modal -->
+    <div id="priceEntryModal" class="tracker-modal-overlay" style="display:none;">
+        <div class="price-modal">
+            <div class="price-modal-header">
+                <span class="price-modal-title" id="priceModalTitle">Add Entry</span>
+                <button class="price-modal-close" id="priceModalClose">✕</button>
+            </div>
+            <div class="price-modal-body">
+                <div>
+                    <label class="price-modal-label" for="priceModalLocation">Location / Vendor</label>
+                    <input type="text" id="priceModalLocation" class="price-modal-input" placeholder="e.g. Serbule, Ivan's Cart">
+                </div>
+                <div>
+                    <label class="price-modal-label" for="priceModalPrice">Price (gold)</label>
+                    <input type="number" id="priceModalPrice" class="price-modal-input" placeholder="e.g. 5000" min="0" step="1">
+                </div>
+                <div>
+                    <label class="price-modal-label" for="priceModalTimestamp">Recorded At</label>
+                    <input type="datetime-local" id="priceModalTimestamp" class="price-modal-input">
+                </div>
+            </div>
+            <div class="price-modal-footer">
+                <button class="tracker-save-btn" id="priceModalSave">Save</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

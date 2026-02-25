@@ -33,6 +33,15 @@ A web-based utility for tracking inventory, storage, vendors, and active quests 
     - Edit via modal dialog (Escape or ✕ to cancel)
   - **Auto-capture from Player.log** - Click "Watch Player.log" in the Vendors tab to select `Player.log` once; the tracker auto-fills remaining gold and reset time whenever you open a vendor shop in-game, with no further interaction needed
 
+- 💰 **Vendor Price Tracker** - Log and track player vendor prices for items
+  - Add any item you want to track prices for
+  - Log price entries with location/vendor name and timestamp (defaults to now)
+  - Retire outdated entries individually — retired entries are excluded from averages but kept visible
+  - Edit or permanently delete any entry
+  - Each item shows average price, average age of active data, and entry count
+  - Searchable item list
+  - All data stored in localStorage — persists across reloads
+
 - 🗺️ **Interactive Maps** (maps.html) - Dedicated map viewer with markers
   - View zone maps with NPC locations and landmarks
   - Click-and-drag panning, mouse wheel zoom
@@ -80,4 +89,4 @@ Folder and file selections are persisted via IndexedDB and auto-resume if the br
 - No installation, build step, or local server required — vanilla HTML/JS only
 - CDN data is cached in-memory for the session; page refresh clears it
 - Folder/file handles are stored in IndexedDB so the browser can reuse them without re-prompting (within the same session)
-- Vendor tracker data (remaining gold, reset timers) is stored in localStorage
+- Vendor tracker data (remaining gold, reset timers) and price tracker data are stored in localStorage
