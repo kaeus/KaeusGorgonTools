@@ -85,7 +85,7 @@ Folder and file selections are persisted via IndexedDB and auto-resume if the br
 - `Player.log` - Live game log used for vendor auto-capture
 
 **CDN Data** (fetched automatically):
-- Quest, item, NPC, and storage vault definitions from `https://cdn.projectgorgon.com/v457/data/`
+- Quest, item, NPC, and storage vault definitions from `https://cdn.projectgorgon.com/` (version auto-detected by following the redirect)
 
 ## Notes
 

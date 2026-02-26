@@ -127,6 +127,7 @@
                 this.cdnItemsData = null;
                 this.storageVaultsData = null;
                 this.cdnBaseUrl = 'https://cdn.projectgorgon.com/v459/data/';
+                this._cdnVersionResolved = false;
             }
 
             async loadCharacterFile(file) {
@@ -145,6 +146,21 @@
                 });
             }
 
+            async resolveCdnBaseUrl() {
+                if (this._cdnVersionResolved) return;
+                this._cdnVersionResolved = true; // mark early to avoid concurrent calls
+                try {
+                    const res = await fetch('https://cdn.projectgorgon.com/', { redirect: 'follow' });
+                    const match = res.url.match(/\/(v\d+)\//);
+                    if (match) {
+                        this.cdnBaseUrl = `https://cdn.projectgorgon.com/${match[1]}/data/`;
+                        console.log('[CDN] Auto-detected version:', match[1], '→', this.cdnBaseUrl);
+                    }
+                } catch (e) {
+                    console.warn('[CDN] Could not auto-detect version, using fallback:', this.cdnBaseUrl, e);
+                }
+            }
+
             async fetchCDNData(filename) {
                 const url = this.cdnBaseUrl + filename;
                 const response = await fetch(url);
@@ -155,6 +171,7 @@
             }
 
             async loadQuestData() {
+                await this.resolveCdnBaseUrl();
                 // Check in-memory cache first
                 if (this.questsData && this.npcsData) {
                     return; // Already loaded in this session
