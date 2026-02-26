@@ -1210,7 +1210,19 @@
                     }
                 } else {
                     const parsedCaps = this.parseCaps(entry.storeService).filter(p => p.favorLevel !== 'Despised');
-                    const currentCap = entry.favorLevel ? parsedCaps.find(p => p.favorLevel === entry.favorLevel) : null;
+                    // Prefer character file favor level; fall back to captured favor level
+                    const effectiveFavorLevel = entry.favorLevel || tracked.favorLevel || null;
+                    const currentCap = effectiveFavorLevel ? parsedCaps.find(p => p.favorLevel === effectiveFavorLevel) : null;
+
+                    // Update favor badge if capture has a more current favor level than the loaded character file
+                    if (tracked.favorLevel && tracked.favorLevel !== entry.favorLevel) {
+                        const favorCell = row.querySelector('.col-favor');
+                        if (favorCell) {
+                            const fl = tracked.favorLevel;
+                            favorCell.innerHTML = `<span class="favor-badge favor-${fl.toLowerCase()}">${fl}</span>`;
+                        }
+                    }
+
                     if (currentCap && capCell) {
                         if (remaining !== null) {
                             const pct = remaining / currentCap.cap;
@@ -1218,6 +1230,17 @@
                             capCell.innerHTML = `<span class="${cls}">${remaining.toLocaleString()}g</span> / ${currentCap.cap.toLocaleString()}g`;
                         } else {
                             capCell.innerHTML = `💰 ${currentCap.cap.toLocaleString()}g`;
+                        }
+                        capCell.className = 'col-cap';
+                    } else if (remaining !== null && capCell) {
+                        // Have remaining data but no matching cap tier — mirror renderNPCCard fallback
+                        const cap = tracked.cap || null;
+                        if (cap) {
+                            const pct = remaining / cap;
+                            const cls = pct > 0.5 ? 'remaining-high' : pct > 0.2 ? 'remaining-med' : 'remaining-low';
+                            capCell.innerHTML = `<span class="${cls}">${remaining.toLocaleString()}g</span> / ${cap.toLocaleString()}g`;
+                        } else {
+                            capCell.innerHTML = `<span class="remaining-unknown">${remaining.toLocaleString()}g / Unknown Cap</span>`;
                         }
                         capCell.className = 'col-cap';
                     }
@@ -1344,6 +1367,8 @@
                         ...existing,
                         remaining: capture.remaining != null ? Math.round(capture.remaining) : existing.remaining,
                         capturedAt: capAt,
+                        favorLevel: capture.favorLevel || existing.favorLevel,
+                        cap: capture.cap != null ? capture.cap : existing.cap,
                     };
                     if (capture.resetAt) {
                         this.vendorData[key].resetAt = capture.resetAt;
@@ -1763,15 +1788,19 @@
                     });
                 });
 
-                // Close open tooltips when clicking outside
-                document.addEventListener('click', (e) => {
-                    if (!e.target.closest('.tooltip-container')) {
-                        container.querySelectorAll('.tooltip-container.tooltip-open').forEach(tc => {
-                            tc.classList.remove('tooltip-open');
-                            tc.querySelector('.tooltip-btn')?.classList.remove('tooltip-active');
-                        });
-                    }
-                }, { capture: false });
+                // Close open tooltips when clicking outside (attach only once across renders)
+                if (!this._docClickHandlerAttached) {
+                    this._docClickHandlerAttached = true;
+                    document.addEventListener('click', (e) => {
+                        if (!e.target.closest('.tooltip-container')) {
+                            const storeList = document.getElementById('storeList');
+                            if (storeList) storeList.querySelectorAll('.tooltip-container.tooltip-open').forEach(tc => {
+                                tc.classList.remove('tooltip-open');
+                                tc.querySelector('.tooltip-btn')?.classList.remove('tooltip-active');
+                            });
+                        }
+                    }, { capture: false });
+                }
 
             }
         }
