@@ -972,6 +972,53 @@ header p {
     color: white;
 }
 
+.col-star {
+    width: 28px;
+    padding-left: 10px !important;
+    padding-right: 4px !important;
+}
+
+.star-btn {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: #ced4da;
+    font-size: 0.95em;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s, background 0.15s;
+}
+
+.star-btn:hover {
+    color: #f0ad4e;
+    background: #fff8e1;
+}
+
+.star-btn.starred {
+    color: #f0ad4e;
+}
+
+.store-table .col-star-header {
+    width: 28px;
+    padding-left: 10px !important;
+    padding-right: 4px !important;
+}
+
+.store-table .col-region {
+    font-size: 0.8em;
+    color: #6c757d;
+    white-space: nowrap;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .tracker-popup {
     display: none;
     position: absolute;
@@ -1814,8 +1861,14 @@ button {
 .price-toolbar {
     display: flex;
     gap: 12px;
-    margin-bottom: 20px;
+    margin-bottom: 12px;
     align-items: center;
+}
+
+.price-log-hint {
+    font-size: 0.85em;
+    color: #6c757d;
+    margin-bottom: 20px;
 }
 
 .price-search {
@@ -2170,4 +2223,145 @@ button {
     z-index: 2000;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
     pointer-events: none;
+}
+
+/* ==========================================================================
+   SHOPS SELLING LIVE CARD (Prices tab)
+   ========================================================================== */
+
+.shops-card {
+    background: #f0f4ff;
+    border: 1px solid #c5cff5;
+    border-left: 4px solid #667eea;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    overflow: hidden;
+}
+
+.shops-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: #e8eeff;
+    border-bottom: 1px solid #c5cff5;
+    gap: 8px;
+}
+
+.shops-card-title {
+    font-weight: 700;
+    font-size: 0.95em;
+    color: #3a4a99;
+}
+
+.shops-card-subtitle {
+    font-size: 0.82em;
+    color: #6c757d;
+    font-weight: normal;
+}
+
+.shops-card-close {
+    background: none;
+    border: none;
+    color: #6c757d;
+    cursor: pointer;
+    font-size: 0.95em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+.shops-card-close:hover {
+    background: #dee2e6;
+    color: #343a40;
+}
+
+.shops-card-body {
+    padding: 10px 14px 12px;
+}
+
+.shops-card-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85em;
+    margin-bottom: 6px;
+}
+.shops-card-table th {
+    text-align: left;
+    padding: 3px 8px;
+    color: #6c757d;
+    font-weight: 600;
+    font-size: 0.9em;
+    border-bottom: 1px solid #dee2e6;
+    white-space: nowrap;
+}
+.shops-card-table td {
+    padding: 3px 8px;
+    vertical-align: top;
+}
+.shops-card-table td:first-child {
+    font-family: monospace;
+    font-weight: 700;
+    color: #495057;
+    white-space: nowrap;
+    width: 54px;
+}
+.shops-card-table td:last-child {
+    color: #6c757d;
+}
+
+.shops-card-elsewhere {
+    font-size: 0.82em;
+    color: #6c757d;
+    padding-top: 6px;
+    margin-top: 2px;
+    border-top: 1px solid #dee2e6;
+}
+
+.shops-card-prices {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #c5cff5;
+}
+.shops-card-prices-title {
+    font-size: 0.82em;
+    font-weight: 700;
+    color: #3a4a99;
+    margin-bottom: 5px;
+}
+.shops-card-price-row {
+    font-size: 0.82em;
+    color: #495057;
+    padding: 2px 0;
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+    flex-wrap: wrap;
+}
+.shops-card-price-gold {
+    font-weight: 700;
+    color: #155724;
+}
+.shops-card-price-loc {
+    color: #6c757d;
+}
+.shops-card-price-age {
+    color: #adb5bd;
+    font-size: 0.9em;
+}
+
+.shops-add-price-btn {
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 0.78em;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    line-height: 1.5;
+}
+.shops-add-price-btn:hover {
+    background: #218838;
 }

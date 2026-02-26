@@ -20,13 +20,18 @@
         </div>
 
         <div class="file-loader">
-            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-                <button id="reloadBtn" style="flex: 1; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 1em;">
-                    🔄 Reload Game Data
-                </button>
-                <button id="selectFolderBtn" onclick="selectReportsFolder()" style="padding: 12px 16px; background: white; color: #667eea; border: 2px solid #667eea; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 1em; white-space: nowrap;">
+            <div style="display: flex; gap: 10px; margin-bottom: 10px; align-items: center; flex-wrap: wrap;">
+                <button id="selectFolderBtn" onclick="selectReportsFolder()" style="padding: 12px 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 1em; white-space: nowrap;">
                     📂 Select Folder
                 </button>
+                <button id="selectPlayerLogBtn" class="btn-secondary player-log-btn" onclick="selectPlayerLogFile()" style="padding: 12px 16px; white-space: nowrap;">
+                    📋 Watch Player.log
+                </button>
+                <span id="reportsWatchStatus" style="font-size: 0.82em; color: #6c757d;"></span>
+            </div>
+            <div id="characterPickerRow" style="display:none; align-items:center; gap:8px; margin-bottom:10px;">
+                <label style="font-weight:600; font-size:0.9em; white-space:nowrap; color:#495057;">Character:</label>
+                <select id="characterPicker" style="flex:1; padding:6px 10px; border:1px solid #ced4da; border-radius:6px; font-size:0.9em; background:#fff; cursor:pointer;"></select>
             </div>
             <div style="font-size: 0.8em; color: #6c757d; margin-bottom: 10px;">
                 Reports folder: <code style="background: #f0f0f0; padding: 1px 5px; border-radius: 3px;">%LocalAppData%Low\Elder Game\Project Gorgon\Reports</code>
@@ -97,18 +102,16 @@
         </div>
 
         <div id="prices" class="tab-content vendor-price-browser">
+            <div id="shopsSellCard" style="display:none;"></div>
             <div class="price-toolbar">
                 <input type="text" id="priceSearch" class="price-search" placeholder="🔍 Search tracked items...">
                 <button class="btn-add-item" id="addItemBtn">+ Add Item</button>
             </div>
+            <div class="price-log-hint">💡 If you're watching <strong>Player.log</strong>, querying the Search Golem in-game will automatically pop up a <em>Shops Selling</em> card here.</div>
             <div id="priceList"></div>
         </div>
 
         <div id="stores" class="tab-content stores-browser">
-            <div class="player-log-bar">
-                <button id="selectPlayerLogBtn" class="btn-secondary player-log-btn" onclick="selectPlayerLogFile()">📋 Watch Player.log</button>
-                <span id="playerLogStatus" class="player-log-status">Select Player.log to auto-capture vendor data when you open shops in-game.</span>
-            </div>
             <div id="storeList"></div>
         </div>
     </div>
@@ -123,7 +126,7 @@
                 this.npcsData = null;
                 this.cdnItemsData = null;
                 this.storageVaultsData = null;
-                this.cdnBaseUrl = 'https://cdn.projectgorgon.com/v457/data/';
+                this.cdnBaseUrl = 'https://cdn.projectgorgon.com/v459/data/';
             }
 
             async loadCharacterFile(file) {
@@ -336,6 +339,28 @@
                     return internalName || 'Inventory';
                 }
                 return this.storageVaultsData[internalName].Name || internalName;
+            }
+
+            // Scan for all Character_*.json files; returns array sorted newest-first
+            async scanCharacterFiles(reportsDir) {
+                const characters = [];
+                for await (const [name, handle] of reportsDir.entries()) {
+                    if (handle.kind !== 'file' || !name.startsWith('Character_') || !name.endsWith('.json')) continue;
+                    const baseName = name.replace(/^Character_/, '').replace(/\.json$/, '');
+                    const parsed = parseCharacterBaseName(baseName);
+                    const file = await handle.getFile();
+                    characters.push({ filename: name, baseName, ...parsed, mtime: file.lastModified, handle });
+                }
+                characters.sort((a, b) => b.mtime - a.mtime);
+                return characters;
+            }
+
+            // Load a specific character file by its already-resolved handle
+            async loadCharacterFromHandle(handle, baseName) {
+                this._charFileBaseName = baseName;
+                const file = await handle.getFile();
+                this.characterData = JSON.parse(await file.text());
+                return this.characterData;
             }
         }
 
@@ -851,13 +876,42 @@
             }
         }
 
+        // Parse "Kaeus" → {charName:"Kaeus", server:"", key:"Kaeus"}
+        // Parse "Kaeus_Server" → {charName:"Kaeus", server:"Server", key:"Kaeus:Server"}
+        function parseCharacterBaseName(baseName) {
+            const idx = baseName.indexOf('_');
+            if (idx === -1) return { charName: baseName, server: '', key: baseName };
+            return {
+                charName: baseName.slice(0, idx),
+                server: baseName.slice(idx + 1),
+                key: baseName.slice(0, idx) + ':' + baseName.slice(idx + 1)
+            };
+        }
+
+        function getVendorDataKey() {
+            return currentCharacterKey ? 'gorgon-vendor-data:' + currentCharacterKey : 'gorgon-vendor-data';
+        }
+
         function loadVendorData() {
-            try { return JSON.parse(localStorage.getItem('gorgon-vendor-data') || '{}'); }
+            try { return JSON.parse(localStorage.getItem(getVendorDataKey()) || '{}'); }
             catch { return {}; }
         }
 
         function saveVendorData(data) {
-            localStorage.setItem('gorgon-vendor-data', JSON.stringify(data));
+            localStorage.setItem(getVendorDataKey(), JSON.stringify(data));
+        }
+
+        function getStarredVendorsKey() {
+            return currentCharacterKey ? 'gorgon-starred-vendors:' + currentCharacterKey : 'gorgon-starred-vendors';
+        }
+
+        function loadStarredVendors() {
+            try { return new Set(JSON.parse(localStorage.getItem(getStarredVendorsKey()) || '[]')); }
+            catch { return new Set(); }
+        }
+
+        function saveStarredVendors(set) {
+            localStorage.setItem(getStarredVendorsKey(), JSON.stringify([...set]));
         }
 
         // Regions to pin to the top of the Stores list (in order), rest sort alphabetically
@@ -869,6 +923,7 @@
                 this.dataLoader = dataLoader;
                 this.storeNPCs = [];
                 this.vendorData = loadVendorData();
+                this.starredVendors = loadStarredVendors();
                 this.resetTicker = null;
 
                 // Canonical favor level ordering (low → high)
@@ -883,6 +938,7 @@
 
                 this.storeNPCs = [];
                 this.vendorData = loadVendorData();
+                this.starredVendors = loadStarredVendors();
 
                 for (const [key, npc] of Object.entries(this.dataLoader.npcsData)) {
                     if (!npc.Services || !Array.isArray(npc.Services)) continue;
@@ -945,16 +1001,125 @@
                     .map(([region, npcs]) => this.renderRegionAccordion(region, npcs))
                     .join('');
 
-                container.innerHTML = vendorsHtml + this.renderNonVendors();
+                container.innerHTML = this.renderFavoritesSection() + vendorsHtml + this.renderUnknownVendors() + this.renderNonVendors();
 
                 this.attachHandlers();
                 this.startResetTicker();
             }
 
+            renderFavoritesSection() {
+                const starred = this.storeNPCs.filter(e => this.starredVendors.has(e.key));
+                if (starred.length === 0) return '';
+
+                starred.sort((a, b) => {
+                    const regionCmp = a.area.localeCompare(b.area);
+                    if (regionCmp !== 0) return regionCmp;
+                    return (a.npc.Name || a.key).localeCompare(b.npc.Name || b.key);
+                });
+
+                const accordionId = 'store-region-favorites';
+                const rows = starred.map(entry => {
+                    const { key, npc, storeService, favorLevel, area } = entry;
+                    const name = npc.Name || key;
+                    const parsedCaps = this.parseCaps(storeService).filter(p => p.favorLevel !== 'Despised');
+                    const currentCap = favorLevel ? parsedCaps.find(p => p.favorLevel === favorLevel) : null;
+                    const capClass = currentCap ? '' : 'no-cap';
+                    const friendsIdx = this.FAVOR_ORDER.indexOf('Friends');
+                    const refCap = parsedCaps.find(p => this.FAVOR_ORDER.indexOf(p.favorLevel) >= friendsIdx) || parsedCaps[0];
+                    const buysText = refCap ? refCap.buyTypes.join(', ') : '';
+                    const favorBadgeHtml = favorLevel
+                        ? `<span class="favor-badge favor-${favorLevel.toLowerCase()}">${favorLevel}</span>`
+                        : `<span class="favor-badge favor-unknown">Not Met</span>`;
+                    const tracked = this.vendorData[key] || {};
+                    const remaining = tracked.remaining !== undefined ? tracked.remaining : null;
+                    const resetAt = tracked.resetAt || null;
+                    let capHtml;
+                    if (currentCap) {
+                        if (remaining !== null) {
+                            const pct = remaining / currentCap.cap;
+                            const cls = pct > 0.5 ? 'remaining-high' : pct > 0.2 ? 'remaining-med' : 'remaining-low';
+                            capHtml = `<span class="${cls}">${remaining.toLocaleString()}g</span> / ${currentCap.cap.toLocaleString()}g`;
+                        } else {
+                            capHtml = `💰 ${currentCap.cap.toLocaleString()}g`;
+                        }
+                    } else {
+                        capHtml = remaining != null ? `<span class="remaining-unknown">${remaining.toLocaleString()}g / Unknown Cap</span>` : '—';
+                    }
+                    let resetHtml = '', resetColClass = 'col-reset';
+                    if (resetAt) {
+                        const ms = resetAt - Date.now();
+                        if (ms <= 0) { resetHtml = 'Ready'; resetColClass += ' reset-ready'; }
+                        else resetHtml = this.formatTimeRemaining(ms);
+                    }
+                    return `
+                        <tr data-npc-key="${key}">
+                            <td class="col-star"><button class="star-btn starred" title="Remove from favorites">★</button></td>
+                            <td class="col-name"><a href="https://wiki.projectgorgon.com/wiki/?search=${encodeURIComponent(name)}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none;" onmouseover="this.style.color='#667eea';this.style.textDecoration='underline'" onmouseout="this.style.color='inherit';this.style.textDecoration='none'">${name}</a></td>
+                            <td class="col-region">${area}</td>
+                            <td class="col-favor">${favorBadgeHtml}</td>
+                            <td class="col-cap ${capClass}">${capHtml}</td>
+                            <td class="${resetColClass}">${resetHtml}</td>
+                            <td class="col-buys">${buysText}</td>
+                            <td class="col-actions">
+                                <div style="display:flex;gap:4px;justify-content:flex-end;align-items:center;">
+                                    <div class="tooltip-container">
+                                        <button class="tooltip-btn">?</button>
+                                        <div class="tooltip-content">
+                                            <div class="tooltip-title">All Favor Tiers</div>
+                                            ${this.renderCapTable(parsedCaps, favorLevel)}
+                                            ${npc.Preferences && npc.Preferences.length > 0 ? `
+                                                <div class="tooltip-title tooltip-title-divider">Gift Preferences</div>
+                                                ${this.renderPreferencesTable(npc.Preferences)}
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+                return `
+                    <div id="favorites-section" class="location-accordion">
+                        <div class="accordion-header" data-accordion="${accordionId}">
+                            <div class="accordion-title">
+                                <span>⭐ Favorites</span>
+                                <span class="quest-count-badge">${starred.length} vendor${starred.length !== 1 ? 's' : ''}</span>
+                            </div>
+                            <div class="accordion-icon">▼</div>
+                        </div>
+                        <div id="${accordionId}" class="accordion-content">
+                            <div class="stores-region-npcs">
+                                <table class="store-table">
+                                    <thead>
+                                        <tr>
+                                            <th class="col-star-header"></th>
+                                            <th>Merchant</th>
+                                            <th>Region</th>
+                                            <th>Favor</th>
+                                            <th>Cap</th>
+                                            <th>Resets</th>
+                                            <th>Buys</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>${rows}</tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
             renderRegionAccordion(region, npcs) {
                 const accordionId = `store-region-${region.replace(/\W+/g, '-').toLowerCase()}`;
-                // Sort NPCs alphabetically within each region
-                const sorted = [...npcs].sort((a, b) => (a.npc.Name || a.key).localeCompare(b.npc.Name || b.key));
+                // Sort: starred first (alphabetically), then rest alphabetically
+                const sorted = [...npcs].sort((a, b) => {
+                    const aStarred = this.starredVendors.has(a.key);
+                    const bStarred = this.starredVendors.has(b.key);
+                    if (aStarred !== bStarred) return aStarred ? -1 : 1;
+                    return (a.npc.Name || a.key).localeCompare(b.npc.Name || b.key);
+                });
 
                 return `
                     <div class="location-accordion">
@@ -970,6 +1135,7 @@
                                 <table class="store-table">
                                     <thead>
                                         <tr>
+                                            <th class="col-star-header"></th>
                                             <th>Merchant</th>
                                             <th>Favor</th>
                                             <th>Cap</th>
@@ -1007,20 +1173,37 @@
                 const resetAt = tracked.resetAt || null;
 
                 const entry = this.storeNPCs.find(e => e.key === key);
-                if (!entry) return;
-                const parsedCaps = this.parseCaps(entry.storeService).filter(p => p.favorLevel !== 'Despised');
-                const currentCap = entry.favorLevel ? parsedCaps.find(p => p.favorLevel === entry.favorLevel) : null;
-
                 const capCell = row.querySelector('.col-cap');
-                if (currentCap) {
-                    if (remaining !== null) {
-                        const pct = remaining / currentCap.cap;
-                        const cls = pct > 0.5 ? 'remaining-high' : pct > 0.2 ? 'remaining-med' : 'remaining-low';
-                        capCell.innerHTML = `<span class="${cls}">${remaining.toLocaleString()}g</span> / ${currentCap.cap.toLocaleString()}g`;
-                    } else {
-                        capCell.innerHTML = `💰 ${currentCap.cap.toLocaleString()}g`;
+
+                if (!entry) {
+                    // Unknown vendor — use cap stored in vendorData
+                    if (capCell) {
+                        const cap = tracked.cap != null ? tracked.cap : null;
+                        if (cap != null) {
+                            if (remaining !== null) {
+                                const pct = remaining / cap;
+                                const cls = pct > 0.5 ? 'remaining-high' : pct > 0.2 ? 'remaining-med' : 'remaining-low';
+                                capCell.innerHTML = `<span class="${cls}">${remaining.toLocaleString()}g</span> / ${cap.toLocaleString()}g`;
+                            } else {
+                                capCell.innerHTML = `💰 ${cap.toLocaleString()}g`;
+                            }
+                        } else {
+                            capCell.innerHTML = remaining !== null ? `${remaining.toLocaleString()}g / Unknown Cap` : '—';
+                        }
                     }
-                    capCell.className = 'col-cap';
+                } else {
+                    const parsedCaps = this.parseCaps(entry.storeService).filter(p => p.favorLevel !== 'Despised');
+                    const currentCap = entry.favorLevel ? parsedCaps.find(p => p.favorLevel === entry.favorLevel) : null;
+                    if (currentCap && capCell) {
+                        if (remaining !== null) {
+                            const pct = remaining / currentCap.cap;
+                            const cls = pct > 0.5 ? 'remaining-high' : pct > 0.2 ? 'remaining-med' : 'remaining-low';
+                            capCell.innerHTML = `<span class="${cls}">${remaining.toLocaleString()}g</span> / ${currentCap.cap.toLocaleString()}g`;
+                        } else {
+                            capCell.innerHTML = `💰 ${currentCap.cap.toLocaleString()}g`;
+                        }
+                        capCell.className = 'col-cap';
+                    }
                 }
 
                 const resetCell = row.querySelector('.col-reset');
@@ -1100,11 +1283,6 @@
             }
 
             applyVendorCaptures(captures) {
-                // Build a key→row map for in-place DOM updates
-                const rowMap = {};
-                document.querySelectorAll('#storeList tr[data-npc-key]').forEach(r => {
-                    rowMap[r.getAttribute('data-npc-key')] = r;
-                });
 
                 let updated = false;
                 for (const capture of Object.values(captures)) {
@@ -1114,7 +1292,32 @@
                         this.findNPCKeyById(capture.npcId) ||
                         this.findNPCKeyByDescription(capture.description) ||
                         this.findNPCKeyByName(capture.vendorName);
-                    if (!key) continue;
+                    if (!key) {
+                        // No CDN match — store under synthetic key for display in unknown vendors section
+                        const syntheticKey = capture.npcInternalKey || `npc:${capture.npcId}`;
+                        const existing = this.vendorData[syntheticKey] || {};
+                        const capAt = capture.capturedAt || 0;
+                        if (capAt <= (existing.capturedAt || 0)) continue;
+                        this.vendorData[syntheticKey] = {
+                            ...existing,
+                            isUnknown: true,
+                            vendorName: capture.vendorName || existing.vendorName || `NPC#${capture.npcId}`,
+                            cap: capture.cap != null ? capture.cap : existing.cap,
+                            favorLevel: capture.favorLevel || existing.favorLevel,
+                            remaining: capture.remaining != null ? Math.round(capture.remaining) : existing.remaining,
+                            capturedAt: capAt,
+                            npcId: capture.npcId,
+                        };
+                        if (capture.resetAt) {
+                            this.vendorData[syntheticKey].resetAt = capture.resetAt;
+                        }
+                        updated = true;
+                        this.refreshUnknownVendorsSection();
+                        const label = capture.vendorName || `NPC#${capture.npcId}`;
+                        const remStr = capture.remaining != null ? `${Math.round(capture.remaining)}g` : '?';
+                        showCaptureToast(`Auto-filled (new): ${label} — ${remStr} remaining`);
+                        continue;
+                    }
 
                     const existing = this.vendorData[key] || {};
                     const capAt = capture.capturedAt || 0;
@@ -1129,7 +1332,7 @@
                         this.vendorData[key].resetAt = capture.resetAt;
                     }
 
-                    if (rowMap[key]) this.updateRowCells(rowMap[key], key);
+                    document.querySelectorAll(`#storeList tr[data-npc-key="${key}"]`).forEach(r => this.updateRowCells(r, key));
                     updated = true;
 
                     const label = capture.vendorName || `NPC#${capture.npcId} (${key})`;
@@ -1198,8 +1401,10 @@
                     else resetHtml = this.formatTimeRemaining(ms);
                 }
 
+                const isStarred = this.starredVendors.has(key);
                 return `
                     <tr data-npc-key="${key}">
+                        <td class="col-star"><button class="star-btn${isStarred ? ' starred' : ''}" title="Pin to top of region">★</button></td>
                         <td class="col-name"><a href="https://wiki.projectgorgon.com/wiki/?search=${encodeURIComponent(name)}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none;" onmouseover="this.style.color='#667eea';this.style.textDecoration='underline'" onmouseout="this.style.color='inherit';this.style.textDecoration='none'">${name}</a></td>
                         <td class="col-favor">${favorBadgeHtml}</td>
                         <td class="col-cap ${capClass}">${capHtml}</td>
@@ -1207,7 +1412,6 @@
                         <td class="col-buys">${buysText}</td>
                         <td class="col-actions">
                             <div style="display:flex;gap:4px;justify-content:flex-end;align-items:center;">
-                                <button class="tracker-btn" title="Track remaining/reset">✏</button>
                                 <div class="tooltip-container">
                                     <button class="tooltip-btn">?</button>
                                     <div class="tooltip-content">
@@ -1350,24 +1554,159 @@
                 `;
             }
 
+            renderUnknownVendors() {
+                const knownKeys = new Set(this.storeNPCs.map(e => e.key));
+                const unknownEntries = Object.entries(this.vendorData)
+                    .filter(([k, v]) => v.isUnknown && !knownKeys.has(k));
+
+                if (unknownEntries.length === 0) return '';
+
+                unknownEntries.sort(([, a], [, b]) => (a.vendorName || '').localeCompare(b.vendorName || ''));
+
+                const accordionId = 'store-region-unknown-vendors';
+                const rows = unknownEntries.map(([key, tracked]) => {
+                    const name = tracked.vendorName || key;
+                    const cap = tracked.cap != null ? tracked.cap : null;
+                    const remaining = tracked.remaining !== undefined ? tracked.remaining : null;
+                    const resetAt = tracked.resetAt || null;
+                    const favorLevel = tracked.favorLevel || 'Unknown';
+
+                    let capHtml;
+                    if (cap != null) {
+                        if (remaining !== null) {
+                            const pct = remaining / cap;
+                            const cls = pct > 0.5 ? 'remaining-high' : pct > 0.2 ? 'remaining-med' : 'remaining-low';
+                            capHtml = `<span class="${cls}">${remaining.toLocaleString()}g</span> / ${cap.toLocaleString()}g`;
+                        } else {
+                            capHtml = `💰 ${cap.toLocaleString()}g`;
+                        }
+                    } else {
+                        capHtml = remaining !== null ? `${remaining.toLocaleString()}g / Unknown Cap` : '—';
+                    }
+
+                    let resetHtml = '', resetColClass = 'col-reset';
+                    if (resetAt) {
+                        const ms = resetAt - Date.now();
+                        if (ms <= 0) { resetHtml = 'Ready'; resetColClass += ' reset-ready'; }
+                        else resetHtml = this.formatTimeRemaining(ms);
+                    }
+
+                    return `
+                        <tr data-npc-key="${key}">
+                            <td class="col-name">${name}</td>
+                            <td class="col-favor"><span class="favor-badge favor-${favorLevel.toLowerCase()}">${favorLevel}</span></td>
+                            <td class="col-cap">${capHtml}</td>
+                            <td class="${resetColClass}">${resetHtml}</td>
+                        </tr>
+                    `;
+                }).join('');
+
+                return `
+                    <div id="unknown-vendors-section" class="location-accordion" style="margin-top: 16px;">
+                        <div class="accordion-header" data-accordion="${accordionId}">
+                            <div class="accordion-title">
+                                <span>❓ Seen In-Game (No CDN Data)</span>
+                                <span class="quest-count-badge">${unknownEntries.length} vendor${unknownEntries.length !== 1 ? 's' : ''}</span>
+                            </div>
+                            <div class="accordion-icon">▼</div>
+                        </div>
+                        <div id="${accordionId}" class="accordion-content">
+                            <div class="stores-region-npcs">
+                                <table class="store-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Vendor</th>
+                                            <th>Favor</th>
+                                            <th>Cap / Remaining</th>
+                                            <th>Resets In</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>${rows}</tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            refreshUnknownVendorsSection() {
+                const container = document.getElementById('storeList');
+                if (!container) return;
+
+                const accordionId = 'store-region-unknown-vendors';
+                const wasOpen = document.getElementById(accordionId)?.classList.contains('active');
+
+                const html = this.renderUnknownVendors();
+                const existing = document.getElementById('unknown-vendors-section');
+
+                if (existing) {
+                    if (html) {
+                        existing.outerHTML = html;
+                    } else {
+                        existing.remove();
+                        return;
+                    }
+                } else if (html) {
+                    // Insert before the non-vendors section if present, else append
+                    const nonVendorEl = container.querySelector('[data-accordion="store-region-non-vendors"]')?.closest('.location-accordion');
+                    if (nonVendorEl) {
+                        nonVendorEl.insertAdjacentHTML('beforebegin', html);
+                    } else {
+                        container.insertAdjacentHTML('beforeend', html);
+                    }
+                } else {
+                    return;
+                }
+
+                // Restore accordion open state
+                const newHeader = container.querySelector(`[data-accordion="${accordionId}"]`);
+                const newContent = document.getElementById(accordionId);
+                if (newHeader && newContent) {
+                    if (wasOpen) {
+                        newHeader.classList.add('active');
+                        newContent.classList.add('active');
+                    }
+                    newHeader.addEventListener('click', () => {
+                        newHeader.classList.toggle('active');
+                        newContent.classList.toggle('active');
+                        const state = this.loadAccordionState();
+                        state[accordionId] = newContent.classList.contains('active');
+                        this.saveAccordionState(state);
+                    });
+                }
+
+            }
+
+            toggleStarred(key) {
+                if (this.starredVendors.has(key)) this.starredVendors.delete(key);
+                else this.starredVendors.add(key);
+                saveStarredVendors(this.starredVendors);
+            }
+
             loadAccordionState() {
-                try { return JSON.parse(localStorage.getItem('gorgon-store-accordion') || '{}'); }
+                const key = currentCharacterKey ? 'gorgon-store-accordion:' + currentCharacterKey : 'gorgon-store-accordion';
+                try { return JSON.parse(localStorage.getItem(key) || '{}'); }
                 catch { return {}; }
             }
 
             saveAccordionState(state) {
-                localStorage.setItem('gorgon-store-accordion', JSON.stringify(state));
+                const key = currentCharacterKey ? 'gorgon-store-accordion:' + currentCharacterKey : 'gorgon-store-accordion';
+                localStorage.setItem(key, JSON.stringify(state));
             }
 
             attachHandlers() {
                 const container = document.getElementById('storeList');
 
                 // Restore accordion open/closed state from localStorage
+                // 'store-region-favorites' defaults to open unless explicitly closed
                 const accordionState = this.loadAccordionState();
                 container.querySelectorAll('.accordion-header').forEach(header => {
                     const id = header.getAttribute('data-accordion');
                     const content = document.getElementById(id);
-                    if (content && accordionState[id] === true) {
+                    if (!content) return;
+                    const defaultOpen = id === 'store-region-favorites';
+                    const shouldOpen = defaultOpen ? accordionState[id] !== false : accordionState[id] === true;
+                    if (shouldOpen) {
                         header.classList.add('active');
                         content.classList.add('active');
                     }
@@ -1384,6 +1723,16 @@
                         const state = this.loadAccordionState();
                         state[id] = content.classList.contains('active');
                         this.saveAccordionState(state);
+                    });
+                });
+
+                // Star/pin buttons — full re-render so favorites section and region order stay correct
+                container.querySelectorAll('.star-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const key = btn.closest('tr').getAttribute('data-npc-key');
+                        this.toggleStarred(key);
+                        this.render();
                     });
                 });
 
@@ -1407,59 +1756,6 @@
                     }
                 }, { capture: false });
 
-                // Tracker pencil button — open modal
-                container.querySelectorAll('.tracker-btn').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        const row = btn.closest('tr');
-                        const key = row.getAttribute('data-npc-key');
-                        const entry = this.storeNPCs.find(en => en.key === key);
-                        const tracked = this.vendorData[key] || {};
-                        const remaining = tracked.remaining !== undefined ? tracked.remaining : '';
-                        let days = '', hours = '', mins = '';
-                        if (tracked.resetAt && tracked.resetAt > Date.now()) {
-                            const s = Math.floor((tracked.resetAt - Date.now()) / 1000);
-                            days  = Math.floor(s / 86400) || '';
-                            hours = Math.floor((s % 86400) / 3600) || '';
-                            mins  = Math.floor((s % 3600) / 60) || '';
-                        }
-                        document.getElementById('trackerModalTitle').textContent = entry?.npc?.Name || key;
-                        document.getElementById('trackerModalRemaining').value = remaining;
-                        document.getElementById('trackerModalDays').value = days;
-                        document.getElementById('trackerModalHours').value = hours;
-                        document.getElementById('trackerModalMins').value = mins;
-                        this._modalKey = key;
-                        this._modalRow = row;
-                        document.getElementById('trackerModal').style.display = 'flex';
-                        document.getElementById('trackerModalRemaining').focus();
-                    });
-                });
-
-                // Modal close / save / clear — assigned with onclick so re-renders don't stack listeners
-                document.getElementById('trackerModalCloseBtn').onclick = () => {
-                    document.getElementById('trackerModal').style.display = 'none';
-                };
-
-                document.getElementById('trackerModalSave').onclick = () => {
-                    const remainingVal = document.getElementById('trackerModalRemaining').value;
-                    const d = parseInt(document.getElementById('trackerModalDays').value)  || 0;
-                    const h = parseInt(document.getElementById('trackerModalHours').value) || 0;
-                    const m = parseInt(document.getElementById('trackerModalMins').value)  || 0;
-                    const remaining = remainingVal !== '' ? parseInt(remainingVal) : undefined;
-                    const totalMs = (d * 86400 + h * 3600 + m * 60) * 1000;
-                    const resetAt = totalMs > 0 ? Date.now() + totalMs : null;
-                    this.vendorData[this._modalKey] = { remaining, resetAt };
-                    saveVendorData(this.vendorData);
-                    this.updateRowCells(this._modalRow, this._modalKey);
-                    document.getElementById('trackerModal').style.display = 'none';
-                };
-
-                document.getElementById('trackerModalClear').onclick = () => {
-                    delete this.vendorData[this._modalKey];
-                    saveVendorData(this.vendorData);
-                    this.updateRowCells(this._modalRow, this._modalKey);
-                    document.getElementById('trackerModal').style.display = 'none';
-                };
             }
         }
 
@@ -1478,6 +1774,47 @@
         let playerLogFileHandle = null;
         let playerLogOffset = 0;
         let playerLogPollTimer = null;
+
+        // Reports folder auto-watcher
+        let reportsWatchTimer = null;
+        let lastLoadedMtime = 0;
+        let isLoadingData = false;
+
+        async function pollReportsFolder() {
+            if (!reportsDirectoryHandle || isLoadingData) return;
+            try {
+                const reportsDir = await dataLoader.resolveReportsDir(reportsDirectoryHandle);
+                let maxMtime = 0;
+                for await (const [name, handle] of reportsDir.entries()) {
+                    if (handle.kind !== 'file' || !name.endsWith('.json')) continue;
+                    if (!name.startsWith('Character_') && !name.includes('_items_')) continue;
+                    const f = await handle.getFile();
+                    if (f.lastModified > maxMtime) maxMtime = f.lastModified;
+                }
+                if (maxMtime > lastLoadedMtime && lastLoadedMtime > 0) {
+                    console.log('[reports watcher] Change detected — reloading...');
+                    await loadAllDataFromDirectory(reportsDirectoryHandle);
+                }
+            } catch (e) {
+                console.warn('[reports watcher] poll error:', e);
+            }
+        }
+
+        function startReportsWatcher() {
+            if (reportsWatchTimer) clearInterval(reportsWatchTimer);
+            reportsWatchTimer = setInterval(pollReportsFolder, 10000);
+        }
+
+        function updateReportsWatchStatus(active) {
+            const el = document.getElementById('reportsWatchStatus');
+            if (!el) return;
+            if (active) {
+                el.textContent = '● Auto-watching';
+                el.style.color = '#28a745';
+            } else {
+                el.textContent = '';
+            }
+        }
 
         async function savePlayerLogHandle(handle) {
             try {
@@ -1503,8 +1840,142 @@
         // Populated by ProcessStartInteraction lines that precede vendor screen opens.
         const npcIdToKeyMap = {};
 
+        const RE_LOGIN             = /Logged in as character (\w+)/;
         const RE_START_INTERACTION = /LocalPlayer: ProcessStartInteraction\((\d+),.*?"([^"]+)"\)/;
         const RE_VENDOR_SCREEN     = /LocalPlayer: ProcessVendorScreen\((\d+), (\w+), (\d+), (\d+), (\d+), "([^"]*)"/;
+        const RE_TALK_SCREEN       = /LocalPlayer: ProcessTalkScreen\(\d+, "[^"]*", "(<h1>Shops Selling [^"]+)", "/;
+
+        // Parse the HTML content string from a ProcessTalkScreen "Shops Selling" line.
+        // The content uses literal \n / \t escape sequences (two chars each) as it appears on one log line.
+        function parseShopsContent(raw) {
+            const content = raw.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+
+            const titleMatch = /<h1>Shops Selling (.+?)<\/h1>/i.exec(content);
+            if (!titleMatch) return null;
+            const itemName = titleMatch[1].trim();
+
+            const countMatch = /(\d+) shops? have that item for sale/i.exec(content);
+            const count = countMatch ? parseInt(countMatch[1]) : null;
+
+            const shopRe = /\[([A-Z]-\d+)\]\s*<em>([^<]+)<\/em>\s*\(run by ([^)]+)\)/g;
+            const shops = [];
+            let m;
+            while ((m = shopRe.exec(content)) !== null) {
+                shops.push({ booth: m[1], name: m[2].trim(), owner: m[3].trim() });
+            }
+
+            const elseSection = /Also for sale at player shops elsewhere[^:]*:([\s\S]*)$/.exec(content);
+            const elsewhere = [];
+            if (elseSection) {
+                const elseRe = /([^\n:]+): for sale at (\d+) shops?/g;
+                let em;
+                while ((em = elseRe.exec(elseSection[1])) !== null) {
+                    elsewhere.push({ location: em[1].trim(), count: parseInt(em[2]) });
+                }
+            }
+
+            return { itemName, count, shops, elsewhere };
+        }
+
+        function showShopsCard(data) {
+            const card = document.getElementById('shopsSellCard');
+            if (!card) return;
+
+            const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+            // Cross-reference with price tracker
+            const trackedItems = Object.values(vendorPriceTracker.data.items);
+            const matched = trackedItems.filter(item => {
+                const a = item.name.toLowerCase(), b = data.itemName.toLowerCase();
+                return a === b || a.includes(b) || b.includes(a);
+            });
+
+            // Sort booths: letter block (A, B, …) then by stall number
+            const sortedShops = [...data.shops].sort((a, b) => {
+                const [aL, aN] = a.booth.split('-');
+                const [bL, bN] = b.booth.split('-');
+                if (aL !== bL) return aL.localeCompare(bL);
+                return parseInt(aN) - parseInt(bN);
+            });
+
+            const shopsHtml = sortedShops.length > 0 ? `
+                <table class="shops-card-table">
+                    <thead><tr><th>Booth</th><th>Shop Name</th><th>Owner</th><th>Price</th></tr></thead>
+                    <tbody>${sortedShops.map(s => `
+                        <tr>
+                            <td>${s.booth}</td>
+                            <td>${esc(s.name)}</td>
+                            <td>${esc(s.owner)}</td>
+                            <td><button class="shops-add-price-btn"
+                                    data-item="${esc(data.itemName)}"
+                                    data-location="${esc(s.booth)}">+ Add</button></td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>` : '';
+
+            const elsewhereHtml = data.elsewhere.length > 0 ? `
+                <div class="shops-card-elsewhere">
+                    Elsewhere: ${data.elsewhere.map(e => `<strong>${esc(e.location)}</strong> (${e.count} shop${e.count !== 1 ? 's' : ''})`).join(', ')}
+                </div>` : '';
+
+            let pricesHtml = '';
+            if (matched.length > 0) {
+                const rows = matched.flatMap(item =>
+                    item.entries
+                        .filter(e => !e.retired)
+                        .map(e => {
+                            const ageMs = Date.now() - e.timestamp;
+                            const age = vendorPriceTracker.formatAge(ageMs);
+                            return `<div class="shops-card-price-row">
+                                <span class="shops-card-price-gold">${e.price.toLocaleString()}g</span>
+                                ${e.location ? `<span class="shops-card-price-loc">@ ${esc(e.location)}</span>` : ''}
+                                <span class="shops-card-price-age">${age} ago</span>
+                            </div>`;
+                        })
+                );
+                if (rows.length > 0) {
+                    pricesHtml = `
+                        <div class="shops-card-prices">
+                            <div class="shops-card-prices-title">📊 Your tracked prices for ${esc(data.itemName)}</div>
+                            ${rows.join('')}
+                        </div>`;
+                }
+            }
+
+            const countStr = data.count !== null ? ` · ${data.count} shop${data.count !== 1 ? 's' : ''}` : '';
+
+            card.className = 'shops-card';
+            card.innerHTML = `
+                <div class="shops-card-header">
+                    <div>
+                        <span class="shops-card-title">Shops Selling: ${esc(data.itemName)}</span>
+                        <span class="shops-card-subtitle">${countStr}</span>
+                    </div>
+                    <button class="shops-card-close" id="shopsSellCardClose">✕</button>
+                </div>
+                <div class="shops-card-body">
+                    ${shopsHtml}
+                    ${elsewhereHtml}
+                    ${pricesHtml}
+                </div>`;
+            card.style.display = 'block';
+
+            document.getElementById('shopsSellCardClose').onclick = () => {
+                card.style.display = 'none';
+            };
+
+            card.querySelectorAll('.shops-add-price-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    vendorPriceTracker.quickAddEntry(
+                        btn.getAttribute('data-item'),
+                        btn.getAttribute('data-location')
+                    );
+                });
+            });
+
+            // Bring the Prices tab to focus so the user sees the card
+            switchTab('prices');
+        }
 
         async function pollPlayerLog() {
             if (!playerLogFileHandle) return;
@@ -1517,12 +1988,34 @@
                     let vendorLinesFound = 0;
 
                     for (const line of lines) {
+                        // Detect character login → auto-switch character context
+                        const loginMatch = RE_LOGIN.exec(line);
+                        if (loginMatch && availableCharacters.length > 0 && reportsDirectoryHandle) {
+                            const charName = loginMatch[1];
+                            const matchingChar = availableCharacters.find(c => c.charName === charName);
+                            if (matchingChar && matchingChar.key !== currentCharacterKey) {
+                                console.log(`[player.log] Login detected for "${charName}" — switching character context`);
+                                const picker = document.getElementById('characterPicker');
+                                if (picker) picker.value = matchingChar.key;
+                                loadAllDataFromDirectory(reportsDirectoryHandle, matchingChar).catch(console.error);
+                            }
+                            continue;
+                        }
+
                         // Build the id→key map from interaction lines
                         const im = RE_START_INTERACTION.exec(line);
                         if (im) {
                             const [, id, internalKey] = im;
                             npcIdToKeyMap[parseInt(id)] = internalKey;
                             console.log(`[player.log] Mapped NPC#${id} → ${internalKey}`);
+                            continue;
+                        }
+
+                        // Detect "Shops Selling X" talk screen → show card in Prices tab
+                        const tm = RE_TALK_SCREEN.exec(line);
+                        if (tm) {
+                            const parsed = parseShopsContent(tm[1]);
+                            if (parsed) showShopsCard(parsed);
                             continue;
                         }
 
@@ -1571,16 +2064,13 @@
 
         function updatePlayerLogStatus(watching) {
             const btn = document.getElementById('selectPlayerLogBtn');
-            const status = document.getElementById('playerLogStatus');
             if (!btn) return;
             if (watching) {
                 btn.textContent = '● Player.log';
                 btn.classList.add('player-log-active');
-                if (status) status.textContent = 'Watching — open a vendor shop in-game to capture data.';
             } else {
                 btn.textContent = '📋 Watch Player.log';
                 btn.classList.remove('player-log-active');
-                if (status) status.textContent = 'Select Player.log to auto-capture vendor data when you open shops in-game.';
             }
         }
 
@@ -1651,8 +2141,17 @@
             }
 
             addEntry(itemId, { location, price, timestamp }) {
-                const entry = { id: generateId(), location, price, timestamp, retired: false };
-                this.data.items[itemId].entries.unshift(entry);
+                const item = this.data.items[itemId];
+                // If a non-retired entry with the same location already exists, update it in place
+                const existing = location
+                    ? item.entries.find(e => !e.retired && e.location.toLowerCase() === location.toLowerCase())
+                    : null;
+                if (existing) {
+                    existing.price = price;
+                    existing.timestamp = timestamp;
+                } else {
+                    item.entries.unshift({ id: generateId(), location, price, timestamp, retired: false });
+                }
                 savePriceTrackerData(this.data);
                 this.render();
             }
@@ -1903,9 +2402,37 @@
                 }
                 document.getElementById('priceEntryModal').style.display = 'none';
             }
+
+            // Find an existing item by exact name (case-insensitive) or create it
+            findOrCreateItem(name) {
+                const lower = name.toLowerCase();
+                const existing = Object.values(this.data.items).find(i => i.name.toLowerCase() === lower);
+                if (existing) return existing.id;
+                const id = generateId();
+                this.data.items[id] = { id, name: name.trim(), entries: [] };
+                savePriceTrackerData(this.data);
+                this.render();
+                return id;
+            }
+
+            // Open the price-entry modal pre-filled with a location; focuses the price field
+            quickAddEntry(itemName, location) {
+                const itemId = this.findOrCreateItem(itemName);
+                this._editingItemId = itemId;
+                this._editingEntryId = null;
+                document.getElementById('priceModalLocation').value = location;
+                document.getElementById('priceModalPrice').value = '';
+                const dt = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                document.getElementById('priceModalTimestamp').value = dt;
+                document.getElementById('priceEntryModal').style.display = 'flex';
+                document.getElementById('priceModalPrice').focus();
+            }
         }
 
         // Application initialization
+        let currentCharacterKey = null;   // e.g. "Kaeus" or "Kaeus:Server"
+        let availableCharacters = [];     // [{filename,baseName,charName,server,key,mtime,handle}]
+
         let dataLoader = new DataLoader();
         let questBrowser = new QuestBrowser(dataLoader);
         let inventoryBrowser = new InventoryBrowser(dataLoader);
@@ -1917,6 +2444,35 @@
             const statusEl = document.getElementById('status');
             statusEl.textContent = message;
             statusEl.className = `status ${type}`;
+        }
+
+        // Migrate legacy (un-keyed) vendor/accordion data to the given character key
+        function migrateLegacyData(charKey) {
+            const legacyVendor = localStorage.getItem('gorgon-vendor-data');
+            if (legacyVendor) {
+                const target = 'gorgon-vendor-data:' + charKey;
+                if (!localStorage.getItem(target)) localStorage.setItem(target, legacyVendor);
+                localStorage.removeItem('gorgon-vendor-data');
+            }
+            const legacyAccordion = localStorage.getItem('gorgon-store-accordion');
+            if (legacyAccordion) {
+                const target = 'gorgon-store-accordion:' + charKey;
+                if (!localStorage.getItem(target)) localStorage.setItem(target, legacyAccordion);
+                localStorage.removeItem('gorgon-store-accordion');
+            }
+        }
+
+        // Populate the character picker dropdown
+        function renderCharacterPicker(characters) {
+            const row = document.getElementById('characterPickerRow');
+            const picker = document.getElementById('characterPicker');
+            if (!row || !picker) return;
+            if (characters.length === 0) { row.style.display = 'none'; return; }
+            picker.innerHTML = characters.map(c => {
+                const label = c.server ? `${c.charName} (${c.server})` : c.charName;
+                return `<option value="${c.key}">${label}</option>`;
+            }).join('');
+            row.style.display = 'flex';
         }
 
         async function handleCharacterFileLoad(file) {
@@ -2005,10 +2561,42 @@
             }
         }
 
-        async function loadAllDataFromDirectory(dirHandle) {
+        async function loadAllDataFromDirectory(dirHandle, charOverride = null) {
+            if (isLoadingData) return;
+            isLoadingData = true;
             try {
                 showStatus('Loading character data from folder...', 'loading');
-                await dataLoader.loadCharacterFromDirectory(dirHandle);
+
+                // Resolve reports dir and cache it so loadItemsFromDirectory can reuse it
+                const reportsDir = await dataLoader.resolveReportsDir(dirHandle);
+                dataLoader._reportsDir = reportsDir;
+
+                // Scan all available character files and populate the picker
+                availableCharacters = await dataLoader.scanCharacterFiles(reportsDir);
+                renderCharacterPicker(availableCharacters);
+
+                // Determine which character to load
+                let charToLoad = charOverride;
+                if (!charToLoad) {
+                    const lastKey = localStorage.getItem('gorgon-last-character');
+                    charToLoad = (lastKey && availableCharacters.find(c => c.key === lastKey))
+                        || availableCharacters[0];
+                }
+                if (!charToLoad) throw new Error('No Character_*.json found in selected folder');
+
+                // Commit character context
+                currentCharacterKey = charToLoad.key;
+                localStorage.setItem('gorgon-last-character', currentCharacterKey);
+
+                // Sync picker to selection
+                const picker = document.getElementById('characterPicker');
+                if (picker) picker.value = currentCharacterKey;
+
+                // One-time migration of un-keyed legacy data → this character's key
+                migrateLegacyData(currentCharacterKey);
+
+                // Load the selected character file
+                await dataLoader.loadCharacterFromHandle(charToLoad.handle, charToLoad.baseName);
 
                 showStatus('Loading items data from folder...', 'loading');
                 await dataLoader.loadItemsFromDirectory(dirHandle);
@@ -2022,12 +2610,29 @@
                 storeBrowser.initialize();
 
                 showStatus(
-                    `✓ Loaded ${dataLoader.characterData.Character}'s data from folder: ${dataLoader.characterData.ActiveQuests.length} quests, ${dataLoader.itemsData.Items.length} items`,
+                    `✓ Loaded ${dataLoader.characterData.Character}'s data: ${dataLoader.characterData.ActiveQuests.length} quests, ${dataLoader.itemsData.Items.length} items`,
                     'success'
                 );
+
+                // Record max mtime of data files so watcher can detect future changes
+                try {
+                    let maxMtime = 0;
+                    for await (const [name, handle] of reportsDir.entries()) {
+                        if (handle.kind !== 'file' || !name.endsWith('.json')) continue;
+                        if (!name.startsWith('Character_') && !name.includes('_items_')) continue;
+                        const f = await handle.getFile();
+                        if (f.lastModified > maxMtime) maxMtime = f.lastModified;
+                    }
+                    lastLoadedMtime = maxMtime;
+                } catch (e) { /* non-critical */ }
+
+                startReportsWatcher();
+                updateReportsWatchStatus(true);
             } catch (error) {
                 showStatus(`✗ Error: ${error.message}`, 'error');
                 console.error('Load error:', error);
+            } finally {
+                isLoadingData = false;
             }
         }
 
@@ -2138,9 +2743,11 @@
             });
         });
 
-        document.getElementById('reloadBtn').addEventListener('click', () => {
-            if (reportsDirectoryHandle) {
-                loadAllDataFromDirectory(reportsDirectoryHandle);
+        document.getElementById('characterPicker').addEventListener('change', (e) => {
+            const key = e.target.value;
+            const char = availableCharacters.find(c => c.key === key);
+            if (char && reportsDirectoryHandle) {
+                loadAllDataFromDirectory(reportsDirectoryHandle, char);
             }
         });
 

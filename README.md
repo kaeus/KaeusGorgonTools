@@ -27,11 +27,13 @@ A web-based utility for tracking inventory, storage, vendors, and active quests 
   - Lists what item categories each merchant buys
   - Tooltip with full favor tier cap breakdown for each merchant
   - Gift preferences table (Love/Hate items and favor-per-gift values)
+  - **Star/pin vendors** - Click the ★ column to pin a vendor to the top of their region's list (persisted per character)
   - **Vendor Tracker** - Record remaining gold and reset timer per vendor
     - Persisted in localStorage across reloads
     - Reset countdown ticks live in the table
     - Edit via modal dialog (Escape or ✕ to cancel)
   - **Auto-capture from Player.log** - Click "Watch Player.log" in the Vendors tab to select `Player.log` once; the tracker auto-fills remaining gold and reset time whenever you open a vendor shop in-game, with no further interaction needed
+  - **Seen In-Game (No CDN Data)** - Vendors seen via log capture that have no CDN entry appear in a dedicated accordion with their captured cap and favor data; tracker modal works for manual adjustments
 
 - 💰 **Vendor Price Tracker** - Log and track player vendor prices for items
   - Add any item you want to track prices for
@@ -41,6 +43,7 @@ A web-based utility for tracking inventory, storage, vendors, and active quests 
   - Each item shows average price, average age of active data, and entry count
   - Searchable item list
   - All data stored in localStorage — persists across reloads
+  - **Search Golem auto-capture** - While watching Player.log, querying the in-game Search Golem triggers a *Shops Selling* card automatically on this tab showing where the item is sold and any matching tracked prices
 
 - 🗺️ **Interactive Maps** (maps.html) - Dedicated map viewer with markers
   - View zone maps with NPC locations and landmarks
