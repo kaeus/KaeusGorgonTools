@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Gorgon: Combat Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .tab-bar {
+            display: flex;
+            gap: 4px;
+            padding: 12px 20px 0;
+            border-bottom: 1px solid #333;
+            margin-bottom: 0;
+        }
+        .tab-btn {
+            padding: 8px 18px;
+            background: #1a1a2e;
+            border: 1px solid #333;
+            border-bottom: none;
+            color: #aaa;
+            cursor: pointer;
+            border-radius: 6px 6px 0 0;
+            font-size: 0.9em;
+            transition: background 0.15s;
+        }
+        .tab-btn:hover { background: #252540; color: #ccc; }
+        .tab-btn.active { background: #0f3460; color: #fff; border-color: #444; }
+
+        .tab-content { padding: 20px; display: none; }
+        .tab-content.active { display: block; }
+
+        .dps-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 900px) { .dps-grid { grid-template-columns: 1fr; } }
+
+        .panel {
+            background: #141428;
+            border: 1px solid #3a3a5a;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .panel-header {
+            background: #1a1a38;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #3a3a5a;
+        }
+        .panel-header h3 { margin: 0; font-size: 0.95em; color: #ddd; }
+        .panel-total { font-size: 1.4em; font-weight: bold; color: #00ff88; font-family: monospace; }
+        .panel-total.incoming { color: #ff6b6b; }
+        .panel-sub { font-size: 0.75em; color: #888; }
+
+        .dps-table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+        .dps-table th {
+            text-align: left; padding: 6px 10px;
+            color: #888; font-weight: normal; font-size: 0.8em;
+            border-bottom: 1px solid #2a2a4a;
+            cursor: pointer; user-select: none;
+        }
+        .dps-table th:hover { color: #bbb; }
+        .dps-table th.sorted { color: #88aaff; }
+        .dps-table td { padding: 5px 10px; border-bottom: 1px solid #1e1e38; vertical-align: middle; }
+        .dps-table tr:last-child td { border-bottom: none; }
+        .dps-table tr.ability-row td { background: #0d0d22; color: #aaa; padding-left: 24px; font-size: 0.9em; }
+        .dps-table tr.player-row td:first-child { cursor: pointer; }
+        .dps-table tr.player-row:hover td { background: #1a1a38; }
+
+        .bar-cell { width: 120px; }
+        .bar-bg { background: #2a2a48; border-radius: 2px; height: 6px; overflow: hidden; }
+        .bar-fill { height: 6px; border-radius: 2px; transition: width 0.3s; }
+        .bar-out { background: #00cc66; }
+        .bar-in  { background: #cc3333; }
+        .bar-ability { background: #5577dd; }
+
+        .hits-table { width: 100%; border-collapse: collapse; font-size: 0.82em; }
+        .hits-table th { text-align: left; padding: 6px 10px; color: #888; font-size: 0.8em; border-bottom: 1px solid #2a2a4a; }
+        .hits-table td { padding: 4px 10px; border-bottom: 1px solid #141428; }
+        .hits-table tr:hover td { background: #1a1a38; }
+        .hits-table .dmg-cell { font-family: monospace; color: #ff8888; text-align: right; }
+        .hits-table .time-cell { color: #777; font-size: 0.85em; width: 50px; }
+        .hits-table .source-cell { color: #ffbb99; }
+        .hits-table .ability-cell { color: #bbbbdd; }
+
+        .name-cell { font-family: monospace; }
+        .name-out  { color: #00ff88; }
+        .name-in   { color: #ff6b6b; }
+        .dps-val   { font-family: monospace; color: #88ccff; text-align: right; white-space: nowrap; }
+        .dmg-val   { font-family: monospace; color: #ddd; text-align: right; }
+        .pct-val   { color: #888; text-align: right; font-size: 0.85em; }
+        .hits-val  { color: #aaa; text-align: right; }
+
+        .empty-panel { padding: 30px; text-align: center; color: #666; font-size: 0.9em; }
+
+        .raw-log {
+            font-family: monospace; font-size: 0.8em; background: #0d0d22;
+            border: 1px solid #2a2a4a; border-radius: 6px; padding: 10px;
+            height: 400px; overflow-y: auto; color: #999;
+        }
+        .raw-line { padding: 2px 0; border-bottom: 1px solid #141428; }
+        .raw-line.matched { color: #bbddff; }
+        .raw-line.unmatched { color: #886655; }
+
+        .window-btns { display: flex; gap: 4px; }
+        .window-btn {
+            padding: 4px 10px; font-size: 0.8em; background: #1a1a2e;
+            border: 1px solid #333; color: #888; cursor: pointer; border-radius: 4px;
+        }
+        .window-btn.active { background: #0f3460; color: #fff; border-color: #446; }
+
+        .summary-row { display: flex; gap: 20px; padding: 12px 20px; background: #111126; border-bottom: 1px solid #2a2a4a; flex-wrap: wrap; }
+        .summary-item { display: flex; flex-direction: column; }
+        .summary-label { font-size: 0.72em; color: #aaa; text-transform: uppercase; letter-spacing: 0.05em; }
+        .summary-value { font-size: 1.1em; font-family: monospace; color: #ddd; }
+        .summary-value.out { color: #00ff88; }
+        .summary-value.inc { color: #ff6b6b; }
+
+        .expand-icon { display: inline-block; width: 14px; color: #777; font-size: 0.8em; }
+        .sort-icon { font-size: 0.7em; margin-left: 3px; }
+        .player-name { font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚔️ Project Gorgon: Combat Tracker</h1>
+            <p>Real-time DPS breakdown and incoming damage recap</p>
+        </header>
+
+        <div class="nav">
+            <a href="index.html">Quest/Inventory Tracker</a>
+            <a href="maps.html">Interactive Maps</a>
+            <a href="chat-watcher.html">Chat Watcher</a>
+            <b>Combat Tracker</b>
+        </div>
+
+        <div class="controls">
+            <div class="control-row">
+                <label>ChatLogs Folder:</label>
+                <div>
+                    <button class="btn-secondary" id="selectFolderBtn" onclick="tracker.selectFolder()">📂 Select ChatLogs Folder</button>
+                    <div class="help-text">Shared with Chat Watcher — only needed once</div>
+                </div>
+            </div>
+            <div class="control-row">
+                <label for="playerNameInput">Your Character Name:</label>
+                <div>
+                    <input type="text" id="playerNameInput" placeholder="e.g. Kaeus" style="width:180px" oninput="tracker.setPlayerName(this.value)">
+                    <div class="help-text">Used to separate your damage from others. Auto-detected from log.</div>
+                </div>
+            </div>
+            <div class="control-row">
+                <label>Window:</label>
+                <div class="window-btns">
+                    <button class="window-btn" data-secs="10"  onclick="tracker.setWindow(10)">10s</button>
+                    <button class="window-btn active" data-secs="30" onclick="tracker.setWindow(30)">30s</button>
+                    <button class="window-btn" data-secs="60"  onclick="tracker.setWindow(60)">60s</button>
+                    <button class="window-btn" data-secs="120" onclick="tracker.setWindow(120)">2m</button>
+                </div>
+            </div>
+            <div class="control-row">
+                <label></label>
+                <button class="btn-danger" onclick="tracker.clearEvents()">🗑️ Clear Data</button>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">No folder selected</span>
+            </div>
+            <div id="fileInfo">—</div>
+        </div>
+
+        <div class="summary-row">
+            <div class="summary-item">
+                <span class="summary-label">Your DPS</span>
+                <span class="summary-value out" id="sumYourDps">—</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Your Dmg (window)</span>
+                <span class="summary-value out" id="sumYourDmg">—</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Incoming DPS</span>
+                <span class="summary-value inc" id="sumIncDps">—</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Incoming Dmg (window)</span>
+                <span class="summary-value inc" id="sumIncDmg">—</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Events parsed</span>
+                <span class="summary-value" id="sumEvents">0</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Unmatched [Combat]</span>
+                <span class="summary-value" id="sumUnmatched" style="color:#886644">0</span>
+            </div>
+        </div>
+
+        <div class="tab-bar">
+            <button class="tab-btn active" onclick="tracker.showTab('outgoing')">⚔️ Outgoing DPS</button>
+            <button class="tab-btn" onclick="tracker.showTab('incoming')">🛡️ Incoming Hits</button>
+            <button class="tab-btn" onclick="tracker.showTab('raw')">📋 Raw [Combat] Lines</button>
+        </div>
+
+        <!-- OUTGOING DPS TAB -->
+        <div class="tab-content active" id="tab-outgoing">
+            <div class="dps-grid">
+                <div class="panel">
+                    <div class="panel-header">
+                        <h3>Your Damage</h3>
+                        <span class="panel-total" id="yourTotalDps">—</span>
+                    </div>
+                    <table class="dps-table" id="yourDpsTable">
+                        <thead>
+                            <tr>
+                                <th onclick="tracker.sortTable('your','ability')" data-col="ability">Ability <span class="sort-icon">↕</span></th>
+                                <th onclick="tracker.sortTable('your','dps')"     data-col="dps"    class="sorted">DPS <span class="sort-icon">↓</span></th>
+                                <th onclick="tracker.sortTable('your','damage')"  data-col="damage" >Damage <span class="sort-icon">↕</span></th>
+                                <th onclick="tracker.sortTable('your','hits')"    data-col="hits"   >Hits <span class="sort-icon">↕</span></th>
+                                <th>%</th>
+                                <th class="bar-cell"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="yourDpsBody"></tbody>
+                    </table>
+                </div>
+                <div class="panel">
+                    <div class="panel-header">
+                        <h3>Other Players</h3>
+                        <span class="panel-total" id="groupTotalDps">—</span>
+                    </div>
+                    <table class="dps-table" id="groupDpsTable">
+                        <thead>
+                            <tr>
+                                <th onclick="tracker.sortTable('group','name')"   data-col="name">Player <span class="sort-icon">↕</span></th>
+                                <th onclick="tracker.sortTable('group','dps')"    data-col="dps" class="sorted">DPS <span class="sort-icon">↓</span></th>
+                                <th onclick="tracker.sortTable('group','damage')" data-col="damage">Damage <span class="sort-icon">↕</span></th>
+                                <th onclick="tracker.sortTable('group','hits')"   data-col="hits">Hits <span class="sort-icon">↕</span></th>
+                                <th class="bar-cell"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="groupDpsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- INCOMING HITS TAB -->
+        <div class="tab-content" id="tab-incoming">
+            <div class="dps-grid">
+                <div class="panel">
+                    <div class="panel-header">
+                        <h3>Incoming by Source</h3>
+                        <span class="panel-total incoming" id="incTotalDps">—</span>
+                    </div>
+                    <table class="dps-table" id="incSourceTable">
+                        <thead>
+                            <tr>
+                                <th onclick="tracker.sortTable('incSrc','name')"   data-col="name">Source <span class="sort-icon">↕</span></th>
+                                <th onclick="tracker.sortTable('incSrc','dps')"    data-col="dps" class="sorted">DPS <span class="sort-icon">↓</span></th>
+                                <th onclick="tracker.sortTable('incSrc','damage')" data-col="damage">Damage <span class="sort-icon">↕</span></th>
+                                <th onclick="tracker.sortTable('incSrc','hits')"   data-col="hits">Hits <span class="sort-icon">↕</span></th>
+                                <th class="bar-cell"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="incSourceBody"></tbody>
+                    </table>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h3>Recent Hits on You</h3></div>
+                    <table class="hits-table" id="recentHitsTable">
+                        <thead>
+                            <tr>
+                                <th class="time-cell">Time</th>
+                                <th class="source-cell">Source</th>
+                                <th class="ability-cell">Ability</th>
+                                <th style="text-align:right">Dmg</th>
+                                <th>Type</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recentHitsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- RAW LOG TAB -->
+        <div class="tab-content" id="tab-raw">
+            <p style="color:#666; font-size:0.85em; margin:0 0 10px">
+                All <code>[Combat]</code> lines from the current log. <span style="color:#aaccff">Blue</span> = matched a damage pattern.
+                <span style="color:#554444">Dark</span> = unmatched (helps identify log formats not yet supported).
+            </p>
+            <div class="raw-log" id="rawLog"></div>
+        </div>
+    </div>
+
+    <script>
+    // ── Combat line parsers ────────────────────────────────────────────────────
+    // Log format: "YY-MM-DD HH:MM:SS\t[Combat] Source: Ability on Target! Dmg: N health, N armor"
+    // Crit variant: "... on Target (CRIT!) Dmg: N health, N armor"
+    // Damage = sum of health + armor values in the Dmg: segment.
+
+    function parseDmgStr(dmgStr) {
+        let total = 0;
+        for (const p of dmgStr.matchAll(/(\d+)\s+(?:health|armor)/g)) total += +p[1];
+        return total;
+    }
+
+    const PARSERS = [
+        // Main format: [Combat] Source: Ability on Target! Dmg: N health[, N armor]
+        // Crit format: [Combat] Source: Ability on Target (CRIT!) Dmg: N health[, N armor]
+        {
+            re: /\[Combat\] (.+?): (.+?) on (.+?)(?:\s*\(CRIT!\)|\s*!)\s*Dmg:\s*(.+)/i,
+            fn: m => {
+                const total = parseDmgStr(m[4]);
+                if (!total) return null;
+                return {
+                    source: m[1].trim(), ability: m[2].trim(), target: m[3].trim(),
+                    damage: total, damageType: m[0].includes('(CRIT!)') ? 'crit' : ''
+                };
+            }
+        },
+        // Indirect: [Combat] Target: Suffered indirect dmg: -N health
+        {
+            re: /\[Combat\] (.+?): Suffered indirect dmg:\s*-(\d+)\s*(health|armor)/i,
+            fn: m => ({ source: '(Indirect)', ability: 'Indirect', target: m[1].trim(), damage: +m[2], damageType: m[3] })
+        },
+    ];
+
+    function parseLogTime(line) {
+        // Format: "YY-MM-DD HH:MM:SS\t..."
+        const m = line.match(/^(\d{2})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
+        if (!m) return Date.now();
+        const d = new Date(2000 + +m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6], 0);
+        if (d.getTime() > Date.now() + 60000) d.setDate(d.getDate() - 1);
+        return d.getTime();
+    }
+
+    function parseCombatLine(line) {
+        if (!line.includes('[Combat]')) return null;
+        // Slice off the timestamp prefix to get "[Combat] ..."
+        const idx = line.indexOf('[Combat]');
+        const stripped = idx >= 0 ? line.slice(idx) : line;
+        for (const { re, fn } of PARSERS) {
+            const m = stripped.match(re);
+            if (m) {
+                const result = fn(m);
+                if (result) return { ...result, time: parseLogTime(line), raw: line };
+            }
+        }
+        return null; // unmatched [Combat] line
+    }
+
+    // ── Main tracker class ────────────────────────────────────────────────────
+    class CombatTracker {
+        constructor() {
+            this.dirHandle  = null;
+            this.fileHandle = null;
+            this.offset     = 0;
+            this.pollTimer  = null;
+            this.events     = [];   // parsed damage events
+            this.rawLines   = [];   // last 200 [Combat] lines
+            this.unmatchedCount = 0;
+            this.totalParsed    = 0;
+            this.windowSecs = parseInt(localStorage.getItem('gorgon-combat-window') || '30');
+            this.playerName = localStorage.getItem('gorgon-combat-player') || '';
+            this.sortState    = { your: 'dps', group: 'dps', incSrc: 'dps' };
+            this.expandedRows = { group: new Set(), incSrc: new Set() };
+            this.activeTab    = 'outgoing';
+            this._renderTimer = null;
+        }
+
+        // ── IndexedDB ─────────────────────────────────────────────────────────
+        async openDB() {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open('GorgonTrackerDB', 1);
+                req.onupgradeneeded = e => e.target.result.createObjectStore('handles');
+                req.onsuccess = e => resolve(e.target.result);
+                req.onerror  = e => reject(e.target.error);
+            });
+        }
+        async getSavedHandle() {
+            try {
+                const db = await this.openDB();
+                return await new Promise(resolve => {
+                    const req = db.transaction('handles','readonly').objectStore('handles').get('chatlogsDir');
+                    req.onsuccess = e => resolve(e.target.result || null);
+                    req.onerror   = () => resolve(null);
+                });
+            } catch { return null; }
+        }
+        async saveHandle(handle) {
+            try {
+                const db = await this.openDB();
+                const tx = db.transaction('handles','readwrite');
+                tx.objectStore('handles').put(handle, 'chatlogsDir');
+                await new Promise(r => { tx.oncomplete = r; });
+            } catch { /* non-critical */ }
+        }
+
+        // ── Folder selection ──────────────────────────────────────────────────
+        async selectFolder() {
+            try {
+                const saved = await this.getSavedHandle();
+                const opts  = { id: 'gorgon-chatlogs', mode: 'read' };
+                if (saved) opts.startIn = saved;
+                this.dirHandle  = await window.showDirectoryPicker(opts);
+                this.fileHandle = null;
+                this.offset     = 0;
+                await this.saveHandle(this.dirHandle);
+                const btn = document.getElementById('selectFolderBtn');
+                btn.textContent = '✓ Folder Selected';
+                btn.style.background = '#28a745';
+                this.startPolling();
+            } catch (e) {
+                if (e.name !== 'AbortError') alert('Error selecting folder: ' + e.message);
+            }
+        }
+
+        async findLatestLogFile() {
+            let best = null, bestMtime = 0;
+            for await (const [name, handle] of this.dirHandle.entries()) {
+                if (handle.kind === 'file' && name.startsWith('Chat-') && name.endsWith('.log')) {
+                    const f = await handle.getFile();
+                    if (f.lastModified > bestMtime) { bestMtime = f.lastModified; best = handle; }
+                }
+            }
+            return best;
+        }
+
+        // ── Polling ───────────────────────────────────────────────────────────
+        startPolling() {
+            if (this.pollTimer) clearTimeout(this.pollTimer);
+            document.getElementById('statusDot').classList.add('active');
+            document.getElementById('statusText').textContent = 'Watching...';
+            this.poll();
+        }
+
+        async poll() {
+            try {
+                await this.readLog();
+            } catch (e) {
+                document.getElementById('statusText').textContent = 'Error: ' + e.message;
+            }
+            this.pollTimer = setTimeout(() => this.poll(), 2000);
+        }
+
+        async readLog() {
+            if (!this.dirHandle) return;
+
+            // Find latest log file (re-check each poll in case a new one appeared)
+            const handle = await this.findLatestLogFile();
+            if (!handle) throw new Error('No Chat-*.log files found');
+
+            const file = await handle.getFile();
+            document.getElementById('fileInfo').textContent = `Watching: ${file.name}`;
+
+            if (handle !== this.fileHandle) {
+                // New file — read from beginning to catch recent history
+                this.fileHandle = handle;
+                this.offset = 0;
+            }
+
+            if (file.size <= this.offset) return;
+
+            const text  = await file.slice(this.offset).text();
+            this.offset = file.size;
+
+            const MAX_HISTORY_MS = 5 * 60 * 1000; // only keep last 5 min on initial read
+            const cutoff = Date.now() - MAX_HISTORY_MS;
+
+            const lines = text.split('\n');
+            for (const line of lines) {
+                if (!line.trim()) continue;
+
+                // Auto-detect player name
+                const loginMatch = line.match(/Logged in as character (\w+)/);
+                if (loginMatch && !this.playerName) {
+                    this.setPlayerName(loginMatch[1]);
+                    document.getElementById('playerNameInput').value = loginMatch[1];
+                }
+
+                if (!line.includes('[Combat]')) continue;
+
+                this.rawLines.push(line);
+                if (this.rawLines.length > 200) this.rawLines.shift();
+
+                const ev = parseCombatLine(line);
+                if (ev) {
+                    if (ev.time >= cutoff) {
+                        this.events.push(ev);
+                        this.totalParsed++;
+                    }
+                } else {
+                    this.unmatchedCount++;
+                }
+            }
+
+            // Prune events older than max window (2 minutes buffer)
+            const prune = Date.now() - 130_000;
+            this.events = this.events.filter(e => e.time >= prune);
+
+            this.scheduleRender();
+        }
+
+        scheduleRender() {
+            if (this._renderTimer) return;
+            this._renderTimer = setTimeout(() => { this._renderTimer = null; this.render(); }, 150);
+        }
+
+        // ── Settings ──────────────────────────────────────────────────────────
+        setWindow(secs) {
+            this.windowSecs = secs;
+            localStorage.setItem('gorgon-combat-window', secs);
+            document.querySelectorAll('.window-btn').forEach(b => {
+                b.classList.toggle('active', +b.dataset.secs === secs);
+            });
+            this.render();
+        }
+
+        setPlayerName(name) {
+            this.playerName = name.trim();
+            localStorage.setItem('gorgon-combat-player', this.playerName);
+        }
+
+        clearEvents() {
+            this.events = [];
+            this.totalParsed = 0;
+            this.unmatchedCount = 0;
+            this.render();
+        }
+
+        showTab(tab) {
+            this.activeTab = tab;
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById('tab-' + tab).classList.add('active');
+            event.target.classList.add('active');
+            if (tab === 'raw') this.renderRaw();
+        }
+
+        sortTable(which, col) {
+            this.sortState[which] = col;
+            // Update header indicators
+            const tableId = which === 'your' ? 'yourDpsTable' : which === 'group' ? 'groupDpsTable' : 'incSourceTable';
+            document.querySelectorAll(`#${tableId} th`).forEach(th => {
+                th.classList.toggle('sorted', th.dataset.col === col);
+                const icon = th.querySelector('.sort-icon');
+                if (icon) icon.textContent = th.dataset.col === col ? '↓' : '↕';
+            });
+            this.render();
+        }
+
+        // ── Data helpers ──────────────────────────────────────────────────────
+        getWindowEvents() {
+            const cutoff = Date.now() - this.windowSecs * 1000;
+            return this.events.filter(e => e.time >= cutoff);
+        }
+
+        aggregateByAbility(events) {
+            // Returns [{ability, damage, hits, dps}] sorted by dps desc
+            const map = {};
+            for (const e of events) {
+                const key = e.ability || '(unknown)';
+                if (!map[key]) map[key] = { ability: key, damage: 0, hits: 0 };
+                map[key].damage += e.damage;
+                map[key].hits++;
+            }
+            return Object.values(map).map(r => ({ ...r, dps: r.damage / this.windowSecs }));
+        }
+
+        aggregateBySource(events) {
+            const map = {};
+            for (const e of events) {
+                const key = e.source;
+                if (!map[key]) map[key] = { name: key, damage: 0, hits: 0, abilities: {} };
+                map[key].damage += e.damage;
+                map[key].hits++;
+                const ab = e.ability || '(unknown)';
+                if (!map[key].abilities[ab]) map[key].abilities[ab] = { damage: 0, hits: 0 };
+                map[key].abilities[ab].damage += e.damage;
+                map[key].abilities[ab].hits++;
+            }
+            return Object.values(map).map(r => ({ ...r, dps: r.damage / this.windowSecs }));
+        }
+
+        sortRows(rows, col) {
+            return [...rows].sort((a, b) => {
+                const av = a[col] ?? a.ability ?? a.name ?? 0;
+                const bv = b[col] ?? b.ability ?? b.name ?? 0;
+                if (typeof av === 'string') return av.localeCompare(bv);
+                return bv - av;
+            });
+        }
+
+        fmt(n)    { return n >= 1000 ? (n/1000).toFixed(1)+'k' : Math.round(n).toString(); }
+        fmtDps(n) { return this.fmt(n) + '/s'; }
+
+        // ── Render ────────────────────────────────────────────────────────────
+        render() {
+            const evts = this.getWindowEvents();
+            const player = this.playerName;
+
+            const yourEvts  = player ? evts.filter(e => e.source === player) : [];
+            // Other DPS: sources hitting the same targets the player has hit in this window.
+            // This works regardless of whether names contain '#' or not.
+            const playerTargets = new Set(yourEvts.map(e => e.target));
+            const groupEvts = player
+                ? evts.filter(e => e.source !== player && playerTargets.has(e.target))
+                : [];
+            const incEvts   = player ? evts.filter(e => e.target === player) : [];
+
+            const yourAbilities = this.aggregateByAbility(yourEvts);
+            const groupSources  = this.aggregateBySource(groupEvts);
+            const incSources    = this.aggregateBySource(incEvts);
+
+            const yourTotal  = yourAbilities.reduce((s, r) => s + r.damage, 0);
+            const incTotal   = incEvts.reduce((s, e) => s + e.damage, 0);
+            const groupTotal = groupEvts.reduce((s, e) => s + e.damage, 0);
+
+            const yourDps = yourTotal / this.windowSecs;
+            const incDps  = incTotal  / this.windowSecs;
+
+            // Summary bar
+            document.getElementById('sumYourDps').textContent  = this.fmtDps(yourDps);
+            document.getElementById('sumYourDmg').textContent  = this.fmt(yourTotal);
+            document.getElementById('sumIncDps').textContent   = this.fmtDps(incDps);
+            document.getElementById('sumIncDmg').textContent   = this.fmt(incTotal);
+            document.getElementById('sumEvents').textContent   = this.totalParsed;
+            document.getElementById('sumUnmatched').textContent = this.unmatchedCount;
+            document.getElementById('yourTotalDps').textContent  = this.fmtDps(yourDps);
+            document.getElementById('groupTotalDps').textContent = this.fmtDps(groupTotal / this.windowSecs);
+            document.getElementById('incTotalDps').textContent   = this.fmtDps(incDps);
+
+            // Your abilities table
+            this.renderAbilityTable('yourDpsBody', this.sortRows(yourAbilities, this.sortState.your), yourTotal, 'out');
+
+            // Group DPS table
+            const sortedGroup = this.sortRows(groupSources, this.sortState.group);
+            const maxGroupDps = sortedGroup[0]?.dps || 1;
+            const tbody = document.getElementById('groupDpsBody');
+            tbody.innerHTML = '';
+            if (!sortedGroup.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-panel">No others hitting your targets in window</td></tr>';
+            } else {
+                for (const row of sortedGroup) {
+                    const pct      = row.dps / maxGroupDps;
+                    const expanded = this.expandedRows.group.has(row.name);
+                    const tr = document.createElement('tr');
+                    tr.className = 'player-row';
+                    tr.innerHTML = `
+                        <td class="name-cell name-out player-name" onclick="tracker.toggleExpand(this, '${this.esc(row.name)}', 'group')">
+                            <span class="expand-icon">${expanded ? '▼' : '▶'}</span>${this.esc(row.name)}
+                        </td>
+                        <td class="dps-val">${this.fmtDps(row.dps)}</td>
+                        <td class="dmg-val">${this.fmt(row.damage)}</td>
+                        <td class="hits-val">${row.hits}</td>
+                        <td class="bar-cell"><div class="bar-bg"><div class="bar-fill bar-out" style="width:${Math.round(pct*100)}%"></div></div></td>`;
+                    tbody.appendChild(tr);
+                    if (expanded) this._insertAbilityRows(tr, row.name, 'group', evts);
+                }
+            }
+
+            // Incoming sources table
+            this.renderSourceTable('incSourceBody', this.sortRows(incSources, this.sortState.incSrc), incTotal, 'in', evts);
+
+            // Recent hits
+            const recent = [...incEvts].sort((a,b) => b.time - a.time).slice(0, 40);
+            const hbody  = document.getElementById('recentHitsBody');
+            hbody.innerHTML = '';
+            if (!recent.length) {
+                hbody.innerHTML = `<tr><td colspan="5" class="empty-panel">${player ? 'No incoming hits in window' : 'Set your player name to see incoming hits'}</td></tr>`;
+            } else {
+                for (const e of recent) {
+                    const t = new Date(e.time);
+                    const ts = t.getHours().toString().padStart(2,'0') + ':' + t.getMinutes().toString().padStart(2,'0') + ':' + t.getSeconds().toString().padStart(2,'0');
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="time-cell">${ts}</td>
+                        <td class="source-cell">${this.esc(e.source)}</td>
+                        <td class="ability-cell">${this.esc(e.ability || '—')}</td>
+                        <td class="dmg-cell">${this.fmt(e.damage)}</td>
+                        <td style="color:#aaa">${this.esc(e.damageType || '—')}</td>`;
+                    hbody.appendChild(tr);
+                }
+            }
+
+            if (this.activeTab === 'raw') this.renderRaw();
+        }
+
+        renderAbilityTable(tbodyId, rows, total, barClass) {
+            const tbody = document.getElementById(tbodyId);
+            tbody.innerHTML = '';
+            if (!rows.length) {
+                tbody.innerHTML = `<tr><td colspan="6" class="empty-panel">${this.playerName ? 'No damage in window' : 'Set your character name above'}</td></tr>`;
+                return;
+            }
+            const maxDps = rows[0]?.dps || 1;
+            for (const row of rows) {
+                const pct = row.dps / maxDps;
+                const tr  = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="name-cell name-${barClass}">${this.esc(row.ability)}</td>
+                    <td class="dps-val">${this.fmtDps(row.dps)}</td>
+                    <td class="dmg-val">${this.fmt(row.damage)}</td>
+                    <td class="hits-val">${row.hits}</td>
+                    <td class="pct-val">${total > 0 ? Math.round(row.damage/total*100) : 0}%</td>
+                    <td class="bar-cell"><div class="bar-bg"><div class="bar-fill bar-${barClass}" style="width:${Math.round(pct*100)}%"></div></div></td>`;
+                tbody.appendChild(tr);
+            }
+        }
+
+        renderSourceTable(tbodyId, rows, total, barClass, evts) {
+            const tbody = document.getElementById(tbodyId);
+            tbody.innerHTML = '';
+            if (!rows.length) {
+                tbody.innerHTML = `<tr><td colspan="5" class="empty-panel">${this.playerName ? 'No incoming damage in window' : 'Set your character name above'}</td></tr>`;
+                return;
+            }
+            const maxDps = rows[0]?.dps || 1;
+            for (const row of rows) {
+                const pct      = row.dps / maxDps;
+                const expanded = this.expandedRows.incSrc.has(row.name);
+                const tr  = document.createElement('tr');
+                tr.className = 'player-row';
+                tr.innerHTML = `
+                    <td class="name-cell name-${barClass} player-name" onclick="tracker.toggleExpand(this, '${this.esc(row.name)}', 'incSrc')">
+                        <span class="expand-icon">${expanded ? '▼' : '▶'}</span>${this.esc(row.name)}
+                    </td>
+                    <td class="dps-val">${this.fmtDps(row.dps)}</td>
+                    <td class="dmg-val">${this.fmt(row.damage)}</td>
+                    <td class="hits-val">${row.hits}</td>
+                    <td class="bar-cell"><div class="bar-bg"><div class="bar-fill bar-${barClass}" style="width:${Math.round(pct*100)}%"></div></div></td>`;
+                tbody.appendChild(tr);
+                if (expanded) this._insertAbilityRows(tr, row.name, 'incSrc', evts);
+            }
+        }
+
+        toggleExpand(cell, name, context) {
+            const set = this.expandedRows[context];
+            if (set.has(name)) { set.delete(name); } else { set.add(name); }
+            this.render();
+        }
+
+        _insertAbilityRows(afterTr, name, context, evts) {
+            let sourceEvts;
+            if (context === 'group') {
+                sourceEvts = evts.filter(e => e.source === name);
+            } else {
+                sourceEvts = evts.filter(e => e.source === name && e.target === this.playerName);
+            }
+            const abilities = this.sortRows(this.aggregateByAbility(sourceEvts), 'dps');
+            const totalDmg  = sourceEvts.reduce((s,e) => s+e.damage, 0);
+            let ref = afterTr;
+            for (const ab of abilities) {
+                const abTr = document.createElement('tr');
+                abTr.className = 'ability-row';
+                abTr.innerHTML = `
+                    <td>${this.esc(ab.ability)}</td>
+                    <td class="dps-val">${this.fmtDps(ab.dps)}</td>
+                    <td class="dmg-val">${this.fmt(ab.damage)}</td>
+                    <td class="hits-val">${ab.hits}</td>
+                    <td class="pct-val">${totalDmg > 0 ? Math.round(ab.damage/totalDmg*100) : 0}%</td>
+                    <td></td>`;
+                ref.after(abTr);
+                ref = abTr;
+            }
+        }
+
+        renderRaw() {
+            const el = document.getElementById('rawLog');
+            el.innerHTML = '';
+            const lines = [...this.rawLines].reverse();
+            for (const line of lines) {
+                const ev  = parseCombatLine(line);
+                const div = document.createElement('div');
+                div.className = 'raw-line ' + (ev ? 'matched' : 'unmatched');
+                div.textContent = line;
+                el.appendChild(div);
+            }
+        }
+
+        esc(s) {
+            return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        async init() {
+            // Restore settings
+            document.getElementById('playerNameInput').value = this.playerName;
+            document.querySelector(`.window-btn[data-secs="${this.windowSecs}"]`)?.classList.add('active');
+            document.querySelectorAll('.window-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector(`.window-btn[data-secs="${this.windowSecs}"]`)?.classList.add('active');
+
+            // Auto-start if we already have a saved handle
+            const saved = await this.getSavedHandle();
+            if (saved) {
+                try {
+                    const perm = await saved.queryPermission({ mode: 'read' });
+                    if (perm === 'granted') {
+                        this.dirHandle = saved;
+                        const btn = document.getElementById('selectFolderBtn');
+                        btn.textContent = '✓ Folder Selected';
+                        btn.style.background = '#28a745';
+                        this.startPolling();
+                    }
+                } catch { /* permission lost */ }
+            }
+
+            // Refresh render every 2s to update DPS numbers even without new lines
+            setInterval(() => this.render(), 2000);
+        }
+    }
+
+    const tracker = new CombatTracker();
+    tracker.init();
+    </script>
+</body>
+</html>

@@ -17,6 +17,7 @@
             <b>Quest/Inventory Tracker</b>
             <a href="maps.html">Interactive Maps</a>
             <a href="chat-watcher.html">Chat Watcher</a>
+            <a href="dps.html">Combat Tracker</a>
         </div>
 
         <div class="file-loader">
@@ -329,26 +330,14 @@
                     this.fetchCDNData('storagevaults.json')
                 ]);
 
-                // Process into keyed lookups
-                this.cdnItemsData = this.processToKeyedLookup(itemsRaw, 'InternalName');
+                // items.json is already keyed by "Item_{TypeId}" — store as-is
+                this.cdnItemsData = itemsRaw;
                 this.storageVaultsData = this.processToKeyedLookup(vaultsRaw, 'InternalName') || vaultsRaw;
             }
 
             getItemDetails(typeId) {
                 if (!this.cdnItemsData) return null;
-
-                // CDN items might be keyed by numeric ID or InternalName
-                // Try direct lookup first
-                let item = this.cdnItemsData[typeId];
-                if (item) return item;
-
-                // Search by Id field
-                for (const itemData of Object.values(this.cdnItemsData)) {
-                    if (itemData.Id === typeId) {
-                        return itemData;
-                    }
-                }
-                return null;
+                return this.cdnItemsData[`item_${typeId}`] || null;
             }
 
             getVaultName(internalName) {
@@ -841,6 +830,13 @@
                 const rarity = item.Rarity || '';
                 const rarityClass = rarity ? `rarity-${rarity.toLowerCase()}` : '';
 
+                console.log(item)
+
+                // Build item icon
+                const iconId = item.details?.IconId;
+                const iconBase = this.dataLoader.cdnBaseUrl.replace('/data/', '/icons/');
+                const iconHtml = iconId ? `<img class="item-icon" src="${iconBase}icon_${iconId}.png" alt="" loading="lazy" onerror="this.style.display='none'">` : '';
+
                 // Build details badges
                 const detailBadges = [];
 
@@ -861,7 +857,10 @@
                 return `
                     <div class="item-card ${rarityClass}">
                         <div class="item-header">
-                            <div class="item-name">${item.Name || 'Unknown Item'}</div>
+                            <div class="item-name-group">
+                                ${iconHtml}
+                                <div class="item-name">${item.Name || 'Unknown Item'}</div>
+                            </div>
                             ${item.StackSize > 1 ? `<span class="item-stack">×${item.StackSize}</span>` : ''}
                         </div>
                         <div class="item-value">
@@ -968,9 +967,10 @@
                     const hasBuyTypes = storeService.CapIncreases.some(line => (line.match(/:/g) || []).length >= 2);
                     // if (!hasBuyTypes) continue;
 
-                    // Match character favor level — character stores NPC keys like "NPC_CharlesThompson"
+                    // Match character favor level — prefer player.log vendor data (more recent), fall back to character file
                     const charNPC = this.dataLoader.characterData?.NPCs?.[key];
-                    const favorLevel = charNPC?.FavorLevel || null;
+                    const vendorEntry = this.vendorData?.[key];
+                    const favorLevel = vendorEntry?.favorLevel || charNPC?.FavorLevel || null;
 
                     this.storeNPCs.push({
                         key,
@@ -1006,6 +1006,21 @@
                     byRegion[region].push(entry);
                 }
 
+                // Fold in unknown vendors (no CDN match) as synthetic entries
+                const knownKeys = new Set(this.storeNPCs.map(e => e.key));
+                for (const [key, tracked] of Object.entries(this.vendorData)) {
+                    if (!tracked.isUnknown || knownKeys.has(key)) continue;
+                    const region = 'Seen In-Game';
+                    if (!byRegion[region]) byRegion[region] = [];
+                    byRegion[region].push({
+                        key,
+                        npc: { Name: tracked.vendorName || key },
+                        storeService: null,
+                        favorLevel: tracked.favorLevel || null,
+                        area: region
+                    });
+                }
+
                 const vendorsHtml = Object.entries(byRegion)
                     .sort(([a], [b]) => {
                         const aPin = STORE_PINNED_REGIONS.indexOf(a);
@@ -1018,7 +1033,7 @@
                     .map(([region, npcs]) => this.renderRegionAccordion(region, npcs))
                     .join('');
 
-                container.innerHTML = this.renderFavoritesSection() + vendorsHtml + this.renderUnknownVendors() + this.renderNonVendors();
+                container.innerHTML = this.renderFavoritesSection() + vendorsHtml + this.renderNonVendors();
 
                 this.attachHandlers();
                 this.startResetTicker();
@@ -1386,7 +1401,7 @@
             }
 
             parseCaps(storeService) {
-                return (storeService.CapIncreases || []).map(line => {
+                return (storeService?.CapIncreases || []).map(line => {
                     const colonIdx = line.indexOf(':');
                     const secondColonIdx = line.indexOf(':', colonIdx + 1);
                     const fLevel = line.substring(0, colonIdx);
@@ -1596,127 +1611,8 @@
                 `;
             }
 
-            renderUnknownVendors() {
-                const knownKeys = new Set(this.storeNPCs.map(e => e.key));
-                const unknownEntries = Object.entries(this.vendorData)
-                    .filter(([k, v]) => v.isUnknown && !knownKeys.has(k));
-
-                if (unknownEntries.length === 0) return '';
-
-                unknownEntries.sort(([, a], [, b]) => (a.vendorName || '').localeCompare(b.vendorName || ''));
-
-                const accordionId = 'store-region-unknown-vendors';
-                const rows = unknownEntries.map(([key, tracked]) => {
-                    const name = tracked.vendorName || key;
-                    const cap = tracked.cap != null ? tracked.cap : null;
-                    const remaining = tracked.remaining !== undefined ? tracked.remaining : null;
-                    const resetAt = tracked.resetAt || null;
-                    const favorLevel = tracked.favorLevel || 'Unknown';
-
-                    let capHtml;
-                    if (cap != null) {
-                        if (remaining !== null) {
-                            const pct = remaining / cap;
-                            const cls = pct > 0.5 ? 'remaining-high' : pct > 0.2 ? 'remaining-med' : 'remaining-low';
-                            capHtml = `<span class="${cls}">${remaining.toLocaleString()}g</span> / ${cap.toLocaleString()}g`;
-                        } else {
-                            capHtml = `💰 ${cap.toLocaleString()}g`;
-                        }
-                    } else {
-                        capHtml = remaining !== null ? `${remaining.toLocaleString()}g / Unknown Cap` : '—';
-                    }
-
-                    let resetHtml = '', resetColClass = 'col-reset';
-                    if (resetAt) {
-                        const ms = resetAt - Date.now();
-                        if (ms <= 0) { resetHtml = 'Ready'; resetColClass += ' reset-ready'; }
-                        else resetHtml = this.formatTimeRemaining(ms);
-                    }
-
-                    return `
-                        <tr data-npc-key="${key}">
-                            <td class="col-name">${name}</td>
-                            <td class="col-favor"><span class="favor-badge favor-${favorLevel.toLowerCase()}">${favorLevel}</span></td>
-                            <td class="col-cap">${capHtml}</td>
-                            <td class="${resetColClass}">${resetHtml}</td>
-                        </tr>
-                    `;
-                }).join('');
-
-                return `
-                    <div id="unknown-vendors-section" class="location-accordion" style="margin-top: 16px;">
-                        <div class="accordion-header" data-accordion="${accordionId}">
-                            <div class="accordion-title">
-                                <span>❓ Seen In-Game (No CDN Data)</span>
-                                <span class="quest-count-badge">${unknownEntries.length} vendor${unknownEntries.length !== 1 ? 's' : ''}</span>
-                            </div>
-                            <div class="accordion-icon">▼</div>
-                        </div>
-                        <div id="${accordionId}" class="accordion-content">
-                            <div class="stores-region-npcs">
-                                <table class="store-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Vendor</th>
-                                            <th>Favor</th>
-                                            <th>Cap / Remaining</th>
-                                            <th>Resets In</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>${rows}</tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }
-
             refreshUnknownVendorsSection() {
-                const container = document.getElementById('storeList');
-                if (!container) return;
-
-                const accordionId = 'store-region-unknown-vendors';
-                const wasOpen = document.getElementById(accordionId)?.classList.contains('active');
-
-                const html = this.renderUnknownVendors();
-                const existing = document.getElementById('unknown-vendors-section');
-
-                if (existing) {
-                    if (html) {
-                        existing.outerHTML = html;
-                    } else {
-                        existing.remove();
-                        return;
-                    }
-                } else if (html) {
-                    // Insert before the non-vendors section if present, else append
-                    const nonVendorEl = container.querySelector('[data-accordion="store-region-non-vendors"]')?.closest('.location-accordion');
-                    if (nonVendorEl) {
-                        nonVendorEl.insertAdjacentHTML('beforebegin', html);
-                    } else {
-                        container.insertAdjacentHTML('beforeend', html);
-                    }
-                } else {
-                    return;
-                }
-
-                // Restore accordion open state
-                const newHeader = container.querySelector(`[data-accordion="${accordionId}"]`);
-                const newContent = document.getElementById(accordionId);
-                if (newHeader && newContent) {
-                    if (wasOpen) {
-                        newHeader.classList.add('active');
-                        newContent.classList.add('active');
-                    }
-                    newHeader.addEventListener('click', () => {
-                        newHeader.classList.toggle('active');
-                        newContent.classList.toggle('active');
-                        const state = this.loadAccordionState();
-                        state[accordionId] = newContent.classList.contains('active');
-                        this.saveAccordionState(state);
-                    });
-                }
-
+                this.render();
             }
 
             toggleStarred(key) {

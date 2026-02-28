@@ -604,6 +604,21 @@ header p {
     margin-bottom: 8px;
 }
 
+.item-name-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.item-icon {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    flex-shrink: 0;
+    image-rendering: pixelated;
+}
+
 .item-name {
     font-weight: 600;
     color: #212529;
