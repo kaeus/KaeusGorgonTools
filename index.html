@@ -830,8 +830,6 @@
                 const rarity = item.Rarity || '';
                 const rarityClass = rarity ? `rarity-${rarity.toLowerCase()}` : '';
 
-                console.log(item)
-
                 // Build item icon
                 const iconId = item.details?.IconId;
                 const iconBase = this.dataLoader.cdnBaseUrl.replace('/data/', '/icons/');
@@ -1799,7 +1797,7 @@
             const countMatch = /(\d+) shops? have that item for sale/i.exec(content);
             const count = countMatch ? parseInt(countMatch[1]) : null;
 
-            const shopRe = /\[([A-Z]-\d+)\]\s*<em>([^<]+)<\/em>\s*\(run by ([^)]+)\)/g;
+            const shopRe = /\[([A-Z]{1,2}-\d+)\]\s*<em>([^<]+)<\/em>\s*\(run by ([^)]+)\)/g;
             const shops = [];
             let m;
             while ((m = shopRe.exec(content)) !== null) {
@@ -1819,7 +1817,10 @@
             return { itemName, count, shops, elsewhere };
         }
 
+        let lastShopsCardData = null;
+
         function showShopsCard(data) {
+            lastShopsCardData = data;
             const card = document.getElementById('shopsSellCard');
             if (!card) return;
 
@@ -1840,18 +1841,29 @@
                 return parseInt(aN) - parseInt(bN);
             });
 
+            const priceByLocation = {};
+            matched.forEach(item => {
+                item.entries.filter(e => !e.retired).forEach(e => {
+                    if (e.location) priceByLocation[e.location] = e;
+                });
+            });
+
             const shopsHtml = sortedShops.length > 0 ? `
                 <table class="shops-card-table">
-                    <thead><tr><th>Booth</th><th>Shop Name</th><th>Owner</th><th>Price</th></tr></thead>
-                    <tbody>${sortedShops.map(s => `
+                    <thead><tr><th>Booth</th><th>Price</th><th>Shop Name</th><th>Owner</th></tr></thead>
+                    <tbody>${sortedShops.map(s => {
+                        const pe = priceByLocation[s.booth];
+                        const priceCell = pe
+                            ? `<button class="shops-add-price-btn shops-price-known" data-item="${esc(data.itemName)}" data-location="${esc(s.booth)}" data-entry-id="${pe.id}">${pe.price.toLocaleString()}g</button>`
+                            : `<button class="shops-add-price-btn" data-item="${esc(data.itemName)}" data-location="${esc(s.booth)}">+ Add</button>`;
+                        return `
                         <tr>
                             <td>${s.booth}</td>
+                            <td>${priceCell}</td>
                             <td>${esc(s.name)}</td>
                             <td>${esc(s.owner)}</td>
-                            <td><button class="shops-add-price-btn"
-                                    data-item="${esc(data.itemName)}"
-                                    data-location="${esc(s.booth)}">+ Add</button></td>
-                        </tr>`).join('')}
+                        </tr>`;
+                    }).join('')}
                     </tbody>
                 </table>` : '';
 
@@ -1860,29 +1872,6 @@
                     Elsewhere: ${data.elsewhere.map(e => `<strong>${esc(e.location)}</strong> (${e.count} shop${e.count !== 1 ? 's' : ''})`).join(', ')}
                 </div>` : '';
 
-            let pricesHtml = '';
-            if (matched.length > 0) {
-                const rows = matched.flatMap(item =>
-                    item.entries
-                        .filter(e => !e.retired)
-                        .map(e => {
-                            const ageMs = Date.now() - e.timestamp;
-                            const age = vendorPriceTracker.formatAge(ageMs);
-                            return `<div class="shops-card-price-row">
-                                <span class="shops-card-price-gold">${e.price.toLocaleString()}g</span>
-                                ${e.location ? `<span class="shops-card-price-loc">@ ${esc(e.location)}</span>` : ''}
-                                <span class="shops-card-price-age">${age} ago</span>
-                            </div>`;
-                        })
-                );
-                if (rows.length > 0) {
-                    pricesHtml = `
-                        <div class="shops-card-prices">
-                            <div class="shops-card-prices-title">📊 Your tracked prices for ${esc(data.itemName)}</div>
-                            ${rows.join('')}
-                        </div>`;
-                }
-            }
 
             const countStr = data.count !== null ? ` · ${data.count} shop${data.count !== 1 ? 's' : ''}` : '';
 
@@ -1898,7 +1887,6 @@
                 <div class="shops-card-body">
                     ${shopsHtml}
                     ${elsewhereHtml}
-                    ${pricesHtml}
                 </div>`;
             card.style.display = 'block';
 
@@ -1908,10 +1896,18 @@
 
             card.querySelectorAll('.shops-add-price-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    vendorPriceTracker.quickAddEntry(
-                        btn.getAttribute('data-item'),
-                        btn.getAttribute('data-location')
-                    );
+                    const entryId = btn.getAttribute('data-entry-id');
+                    if (entryId) {
+                        const itemId = vendorPriceTracker.findOrCreateItem(btn.getAttribute('data-item'));
+                        vendorPriceTracker._editingItemId = itemId;
+                        vendorPriceTracker._editingEntryId = entryId;
+                        vendorPriceTracker.openEntryModal();
+                    } else {
+                        vendorPriceTracker.quickAddEntry(
+                            btn.getAttribute('data-item'),
+                            btn.getAttribute('data-location')
+                        );
+                    }
                 });
             });
 
@@ -2040,6 +2036,19 @@
                 : Math.random().toString(36).slice(2) + Date.now().toString(36);
         }
 
+        const PRICE_CATEGORIES = [
+            { id: 'crystal',         label: 'Crystal',         keyword: 'Crystal' },
+            { id: 'blue-crystal',    label: 'Blue Crystal',    keyword: 'BlueCrystal' },
+            { id: 'green-crystal',   label: 'Green Crystal',   keyword: 'GreenCrystal' },
+            { id: 'white-crystal',   label: 'White Crystal',   keyword: 'WhiteCrystal' },
+            { id: 'orange-crystal',  label: 'Orange Crystal',  keyword: 'OrangeCrystal' },
+            { id: 'illmari-crystal', label: 'Illmari Crystal', keyword: 'IllmariCrystal' },
+            { id: 'recipe',          label: 'Recipe',          keyword: 'Recipe' },
+            { id: 'metal-slab',      label: 'Metal Slab',      keyword: 'MetalSlab' },
+            { id: 'ore',             label: 'Ore',             keyword: 'Ore' },
+            { id: 'alchemy',         label: 'Alchemy',         keyword: 'AlchemyIngredient' },
+        ];
+
         function loadPriceTrackerData() {
             try { return JSON.parse(localStorage.getItem('gorgon-price-tracker') || '{"items":{}}'); }
             catch { return { items: {} }; }
@@ -2056,6 +2065,10 @@
                 this.expandedItems = new Set();
                 this._editingItemId = null;
                 this._editingEntryId = null;
+                const savedCats = localStorage.getItem('gorgon-price-cats-expanded');
+                this.expandedCategories = savedCats
+                    ? new Set(JSON.parse(savedCats))
+                    : new Set([...PRICE_CATEGORIES.map(c => c.id), 'uncategorized']);
             }
 
             getFilteredItems() {
@@ -2063,6 +2076,28 @@
                 return Object.values(this.data.items)
                     .filter(item => !q || item.name.toLowerCase().includes(q))
                     .sort((a, b) => a.name.localeCompare(b.name));
+            }
+
+            buildKeywordIndex() {
+                const index = new Map();
+                const cdnItems = dataLoader.cdnItemsData;
+                if (!cdnItems) return index;
+                for (const item of Object.values(cdnItems)) {
+                    if (item.Name && Array.isArray(item.Keywords)) {
+                        index.set(item.Name.toLowerCase(), new Set(item.Keywords));
+                    }
+                }
+                return index;
+            }
+
+            getItemCategories(itemName, keywordIndex) {
+                const keywords = keywordIndex.get(itemName.toLowerCase());
+                if (!keywords) return [];
+                return PRICE_CATEGORIES.filter(cat => keywords.has(cat.keyword)).map(cat => cat.id);
+            }
+
+            saveCategoryState() {
+                localStorage.setItem('gorgon-price-cats-expanded', JSON.stringify([...this.expandedCategories]));
             }
 
             addItem(name) {
@@ -2184,8 +2219,50 @@
                     return;
                 }
 
-                container.innerHTML = filtered.map(item => this.renderItem(item)).join('');
+                const keywordIndex = this.buildKeywordIndex();
+                if (!keywordIndex.size) {
+                    // CDN data not ready yet — render flat
+                    container.innerHTML = filtered.map(item => this.renderItem(item)).join('');
+                    this.attachHandlers();
+                    return;
+                }
+
+                // Group items by category (items can belong to multiple)
+                const categoryItems = new Map(PRICE_CATEGORIES.map(c => [c.id, []]));
+                const uncategorized = [];
+                for (const item of filtered) {
+                    const cats = this.getItemCategories(item.name, keywordIndex);
+                    if (cats.length === 0) {
+                        uncategorized.push(item);
+                    } else {
+                        for (const catId of cats) categoryItems.get(catId).push(item);
+                    }
+                }
+
+                const sections = [];
+                for (const cat of PRICE_CATEGORIES) {
+                    const items = categoryItems.get(cat.id);
+                    if (items.length > 0) sections.push(this.renderCategory(cat.id, cat.label, items));
+                }
+                if (uncategorized.length > 0) sections.push(this.renderCategory('uncategorized', 'Other', uncategorized));
+
+                container.innerHTML = sections.join('');
                 this.attachHandlers();
+            }
+
+            renderCategory(catId, label, items) {
+                const isExpanded = this.expandedCategories.has(catId);
+                return `
+                    <div class="price-category">
+                        <div class="price-category-header${isExpanded ? ' expanded' : ''}" data-toggle-category="${catId}">
+                            <span class="price-category-arrow">▶</span>
+                            <span class="price-category-label">${label}</span>
+                            <span class="price-category-count">${items.length} item${items.length !== 1 ? 's' : ''}</span>
+                        </div>
+                        <div class="price-category-body${isExpanded ? ' expanded' : ''}">
+                            ${items.map(item => this.renderItem(item)).join('')}
+                        </div>
+                    </div>`;
             }
 
             renderItem(item) {
@@ -2262,6 +2339,16 @@
 
             attachHandlers() {
                 const container = document.getElementById('priceList');
+
+                container.querySelectorAll('[data-toggle-category]').forEach(el => {
+                    el.addEventListener('click', () => {
+                        const id = el.getAttribute('data-toggle-category');
+                        if (this.expandedCategories.has(id)) this.expandedCategories.delete(id);
+                        else this.expandedCategories.add(id);
+                        this.saveCategoryState();
+                        this.render();
+                    });
+                });
 
                 container.querySelectorAll('[data-toggle-item]').forEach(el => {
                     el.addEventListener('click', (e) => {
@@ -2343,6 +2430,9 @@
                     this.addEntry(this._editingItemId, { location, price, timestamp });
                 }
                 document.getElementById('priceEntryModal').style.display = 'none';
+                if (lastShopsCardData && document.getElementById('shopsSellCard')?.style.display !== 'none') {
+                    showShopsCard(lastShopsCardData);
+                }
             }
 
             // Find an existing item by exact name (case-insensitive) or create it
@@ -2587,6 +2677,7 @@
 
                 showStatus('Loading item database from CDN...', 'loading');
                 await dataLoader.loadInventoryData();
+                vendorPriceTracker.render();
 
                 // Initialize all browsers
                 await questBrowser.initialize();

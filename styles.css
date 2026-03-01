@@ -1919,6 +1919,66 @@ button {
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
 
+.price-category {
+    margin-bottom: 6px;
+}
+.price-category-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: #e8eaf6;
+    border: 1px solid #c5cff5;
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+    font-weight: 600;
+    font-size: 0.88em;
+    color: #3949ab;
+}
+.price-category-header:hover {
+    background: #dde0f5;
+}
+.price-category-header.expanded {
+    border-radius: 6px 6px 0 0;
+}
+.price-category-arrow {
+    font-size: 0.65em;
+    transition: transform 0.15s;
+    display: inline-block;
+}
+.price-category-header.expanded .price-category-arrow {
+    transform: rotate(90deg);
+}
+.price-category-label {
+    flex: 1;
+}
+.price-category-count {
+    font-weight: 400;
+    font-size: 0.85em;
+    color: #5c6bc0;
+}
+.price-category-body {
+    display: none;
+    border: 1px solid #c5cff5;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    overflow: hidden;
+}
+.price-category-body.expanded {
+    display: block;
+}
+.price-category-body .price-item-accordion {
+    margin-bottom: 0;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    border-top: none;
+}
+.price-category-body .price-item-accordion:last-child {
+    border-bottom: none;
+}
+
 .price-item-accordion {
     margin-bottom: 10px;
     border: 2px solid #e9ecef;
@@ -2379,4 +2439,10 @@ button {
 }
 .shops-add-price-btn:hover {
     background: #218838;
+}
+.shops-price-known {
+    background: #155724;
+}
+.shops-price-known:hover {
+    background: #0d3d17;
 }
