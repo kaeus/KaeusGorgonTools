@@ -1075,11 +1075,12 @@
                     } else {
                         capHtml = remaining != null ? `<span class="remaining-unknown">${remaining.toLocaleString()}g / Unknown Cap</span>` : '—';
                     }
-                    let resetHtml = '', resetColClass = 'col-reset';
+                    let resetHtml = '', resetColClass = 'col-reset', resetStyle = '';
                     if (resetAt) {
                         const ms = resetAt - Date.now();
                         if (ms <= 0) { resetHtml = 'Ready'; resetColClass += ' reset-ready'; }
                         else resetHtml = this.formatTimeRemaining(ms);
+                        resetStyle = `color:${this.resetColor(ms)}`;
                     }
                     return `
                         <tr data-npc-key="${key}">
@@ -1088,7 +1089,7 @@
                             <td class="col-region">${area}</td>
                             <td class="col-favor">${favorBadgeHtml}</td>
                             <td class="col-cap ${capClass}">${capHtml}</td>
-                            <td class="${resetColClass}">${resetHtml}</td>
+                            <td class="${resetColClass}" style="${resetStyle}">${resetHtml}</td>
                             <td class="col-buys">${buysText}</td>
                             <td class="col-actions">
                                 <div style="display:flex;gap:4px;justify-content:flex-end;align-items:center;">
@@ -1098,7 +1099,10 @@
                                             <div class="tooltip-title">All Favor Tiers</div>
                                             ${this.renderCapTable(parsedCaps, favorLevel)}
                                             ${npc.Preferences && npc.Preferences.length > 0 ? `
-                                                <div class="tooltip-title tooltip-title-divider">Gift Preferences</div>
+                                                <div class="tooltip-title tooltip-title-divider">
+                                                    <span>Gift Preferences</span>
+                                                    <button class="favor-items-btn" data-npc-key="${key}" data-npc-name="${name.replace(/"/g, '&quot;')}">Find Favor Items</button>
+                                                </div>
                                                 ${this.renderPreferencesTable(npc.Preferences)}
                                             ` : ''}
                                         </div>
@@ -1197,6 +1201,16 @@
                 return parts.join(' ');
             }
 
+            resetColor(ms) {
+                if (ms <= 0) return 'rgb(40,167,69)'; // green = ready
+                const MAX_MS = 7 * 24 * 60 * 60 * 1000;
+                const ratio = Math.min(ms / MAX_MS, 1); // 0 = ready, 1 = week out
+                const r = Math.round(40  + (220 - 40)  * ratio);
+                const g = Math.round(167 + (53  - 167) * ratio);
+                const b = Math.round(69  + (69  - 69)  * ratio);
+                return `rgb(${r},${g},${b})`;
+            }
+
             updateRowCells(row, key) {
                 const tracked = this.vendorData[key] || {};
                 const remaining = tracked.remaining !== undefined ? tracked.remaining : null;
@@ -1269,9 +1283,11 @@
                         resetCell.textContent = this.formatTimeRemaining(ms);
                         resetCell.className = 'col-reset';
                     }
+                    resetCell.style.color = this.resetColor(ms);
                 } else {
                     resetCell.textContent = '';
                     resetCell.className = 'col-reset';
+                    resetCell.style.color = '';
                 }
             }
 
@@ -1294,6 +1310,7 @@
                             resetCell.textContent = this.formatTimeRemaining(ms);
                             resetCell.className = 'col-reset';
                         }
+                        resetCell.style.color = this.resetColor(ms);
                     });
                 }, 30000);
             }
@@ -1449,11 +1466,12 @@
                 }
 
                 // Reset cell
-                let resetHtml = '', resetColClass = 'col-reset';
+                let resetHtml = '', resetColClass = 'col-reset', resetStyle = '';
                 if (resetAt) {
                     const ms = resetAt - Date.now();
                     if (ms <= 0) { resetHtml = 'Ready'; resetColClass += ' reset-ready'; }
                     else resetHtml = this.formatTimeRemaining(ms);
+                    resetStyle = `color:${this.resetColor(ms)}`;
                 }
 
                 const isStarred = this.starredVendors.has(key);
@@ -1463,7 +1481,7 @@
                         <td class="col-name"><a href="https://wiki.projectgorgon.com/wiki/?search=${encodeURIComponent(name)}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none;" onmouseover="this.style.color='#667eea';this.style.textDecoration='underline'" onmouseout="this.style.color='inherit';this.style.textDecoration='none'">${name}</a></td>
                         <td class="col-favor">${favorBadgeHtml}</td>
                         <td class="col-cap ${capClass}">${capHtml}</td>
-                        <td class="${resetColClass}">${resetHtml}</td>
+                        <td class="${resetColClass}" style="${resetStyle}">${resetHtml}</td>
                         <td class="col-buys">${buysText}</td>
                         <td class="col-actions">
                             <div style="display:flex;gap:4px;justify-content:flex-end;align-items:center;">
@@ -1473,7 +1491,10 @@
                                         <div class="tooltip-title">All Favor Tiers</div>
                                         ${this.renderCapTable(parsedCaps, favorLevel)}
                                         ${npc.Preferences && npc.Preferences.length > 0 ? `
-                                            <div class="tooltip-title tooltip-title-divider">Gift Preferences</div>
+                                            <div class="tooltip-title tooltip-title-divider">
+                                                <span>Gift Preferences</span>
+                                                <button class="favor-items-btn" data-npc-key="${key}" data-npc-name="${name.replace(/"/g, '&quot;')}">Find Favor Items</button>
+                                            </div>
                                             ${this.renderPreferencesTable(npc.Preferences)}
                                         ` : ''}
                                     </div>
@@ -1556,6 +1577,65 @@
                 `;
             }
 
+            // Keywords that alone are too broad to be useful gift matches
+            static get BROAD_GIFT_KEYWORDS() {
+                return new Set(['Loot', 'Equipment']);
+            }
+
+            findFavorItems(npcKey) {
+                const npc = this.dataLoader.npcsData?.[npcKey];
+                const inventory = this.dataLoader.itemsData?.Items;
+                if (!npc?.Preferences?.length || !inventory?.length || !this.dataLoader.cdnItemsData) return [];
+
+                const relevantPrefs = npc.Preferences.filter(p => p.Desire === 'Love' || p.Desire === 'Like');
+                if (!relevantPrefs.length) return [];
+
+                const results = [];
+                for (const invItem of inventory) {
+                    const cdnItem = this.dataLoader.getItemDetails(invItem.TypeID);
+                    if (!cdnItem?.Keywords?.length) continue;
+
+                    const itemKwSet = new Set(cdnItem.Keywords);
+                    // OffHandShield counts as Shield for preference matching
+                    if (itemKwSet.has('OffHandShield')) itemKwSet.add('Shield');
+
+                    let bestPref = null;
+                    for (const pref of relevantPrefs) {
+                        if (!pref.Keywords?.length) continue;
+                        // Strip Key=Value modifier entries (e.g. MinRarity=Uncommon)
+                        const baseKws = pref.Keywords.filter(k => !k.includes('='));
+                        if (!baseKws.length) continue;
+                        // Skip preferences whose only keywords are too broad
+                        if (baseKws.length === 1 && StoreBrowser.BROAD_GIFT_KEYWORDS.has(baseKws[0])) continue;
+                        // All base keywords must be present in the item's keywords
+                        if (!baseKws.every(kw => itemKwSet.has(kw))) continue;
+
+                        if (!bestPref ||
+                            (pref.Desire === 'Love' && bestPref.Desire !== 'Love') ||
+                            (pref.Desire === bestPref.Desire && (pref.Pref || 0) > (bestPref.Pref || 0))) {
+                            bestPref = pref;
+                        }
+                    }
+                    if (!bestPref) continue;
+
+                    results.push({
+                        name: cdnItem.Name || invItem.Name || `Item #${invItem.TypeID}`,
+                        stackSize: invItem.StackSize || 1,
+                        vaultName: this.dataLoader.getVaultName(invItem.StorageVault) || invItem.StorageVault || '?',
+                        desire: bestPref.Desire,
+                        prefName: bestPref.Name || '',
+                        favorPerGift: bestPref.Pref || 0
+                    });
+                }
+
+                results.sort((a, b) => {
+                    if (a.desire !== b.desire) return a.desire === 'Love' ? -1 : 1;
+                    if (b.favorPerGift !== a.favorPerGift) return b.favorPerGift - a.favorPerGift;
+                    return a.name.localeCompare(b.name);
+                });
+                return results;
+            }
+
             renderNonVendors() {
                 const charNPCs = this.dataLoader.characterData?.NPCs;
                 if (!charNPCs) return '';
@@ -1568,7 +1648,8 @@
                     const npcData = this.dataLoader.npcsData?.[key];
                     const name = npcData?.Name || key;
                     const favorLevel = charNPC.FavorLevel || 'Unknown';
-                    nonVendors.push({ name, favorLevel });
+                    const hasGiftPrefs = npcData?.Preferences?.some(p => p.Desire === 'Love' || p.Desire === 'Like');
+                    nonVendors.push({ key, name, favorLevel, hasGiftPrefs });
                 }
 
                 if (nonVendors.length === 0) return '';
@@ -1580,6 +1661,7 @@
                     <tr>
                         <td class="col-name">${nv.name}</td>
                         <td class="col-favor"><span class="favor-badge favor-${nv.favorLevel.toLowerCase()}">${nv.favorLevel}</span></td>
+                        <td class="col-actions" style="text-align:right;">${nv.hasGiftPrefs ? `<button class="favor-items-btn" data-npc-key="${nv.key}" data-npc-name="${nv.name.replace(/"/g, '&quot;')}">Find Favor Items</button>` : ''}</td>
                     </tr>
                 `).join('');
 
@@ -1599,6 +1681,7 @@
                                         <tr>
                                             <th>NPC</th>
                                             <th>Favor</th>
+                                            <th></th>
                                         </tr>
                                     </thead>
                                     <tbody>${rows}</tbody>
@@ -1682,6 +1765,16 @@
                     });
                 });
 
+                // Favor items buttons inside tooltips
+                container.querySelectorAll('.favor-items-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const npcKey = btn.getAttribute('data-npc-key');
+                        const npcName = btn.getAttribute('data-npc-name');
+                        showFavorItemsModal(npcKey, npcName);
+                    });
+                });
+
                 // Close open tooltips when clicking outside (attach only once across renders)
                 if (!this._docClickHandlerAttached) {
                     this._docClickHandlerAttached = true;
@@ -1697,6 +1790,44 @@
                 }
 
             }
+        }
+
+        // Show a modal listing inventory items that grant favor with the given NPC
+        function showFavorItemsModal(npcKey, npcName) {
+            const items = storeBrowser.findFavorItems(npcKey);
+            const modal = document.getElementById('favorItemsModal');
+            document.getElementById('favorItemsModalTitle').textContent = `Favor Items — ${npcName}`;
+
+            const body = document.getElementById('favorItemsModalBody');
+            if (!dataLoader.itemsData?.Items?.length) {
+                body.innerHTML = '<p style="padding:16px;color:#6c757d;font-size:0.9em;">Load your inventory data first to find matching items.</p>';
+            } else if (!items.length) {
+                body.innerHTML = '<p style="padding:16px;color:#6c757d;font-size:0.9em;">No matching items found in your inventory.</p>';
+            } else {
+                const renderGroup = (label, groupItems) => {
+                    if (!groupItems.length) return '';
+                    const color = label === 'Love' ? '#155724' : '#856404';
+                    const emoji = label === 'Love' ? '❤️' : '👍';
+                    const rows = groupItems.map(i => `
+                        <tr>
+                            <td>${i.name}${i.stackSize > 1 ? ` <span style="color:#6c757d;font-size:0.85em;">×${i.stackSize}</span>` : ''}</td>
+                            <td style="color:#6c757d;">${i.vaultName}</td>
+                            <td>${i.favorPerGift}</td>
+                        </tr>
+                    `).join('');
+                    return `
+                        <div class="favor-items-group-header" style="color:${color};">${emoji} ${label}</div>
+                        <table class="favor-items-table">
+                            <thead><tr><th>Item</th><th>Location</th><th>Fav/Gift</th></tr></thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    `;
+                };
+                body.innerHTML =
+                    renderGroup('Love', items.filter(i => i.desire === 'Love')) +
+                    renderGroup('Like', items.filter(i => i.desire === 'Like'));
+            }
+            modal.style.display = 'flex';
         }
 
         // Show a brief non-blocking toast when vendor captures auto-fill data
@@ -2930,6 +3061,17 @@
             <div class="price-modal-footer">
                 <button class="tracker-save-btn" id="addItemSave">Add Item</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Favor Items modal -->
+    <div id="favorItemsModal" class="tracker-modal-overlay" style="display:none;" onclick="if(event.target===this)this.style.display='none'">
+        <div class="favor-items-modal">
+            <div class="price-modal-header">
+                <span class="price-modal-title" id="favorItemsModalTitle">Favor Items</span>
+                <button class="price-modal-close" onclick="document.getElementById('favorItemsModal').style.display='none'">✕</button>
+            </div>
+            <div class="favor-items-modal-body" id="favorItemsModalBody"></div>
         </div>
     </div>
 

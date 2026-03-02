@@ -27,6 +27,7 @@ A web-based utility for tracking inventory, storage, vendors, and active quests 
   - Lists what item categories each merchant buys
   - Tooltip with full favor tier cap breakdown for each merchant
   - Gift preferences table (Love/Hate items and favor-per-gift values)
+  - **Find Favor Items** - Click the button next to "Gift Preferences" in any vendor's help tooltip to open a modal listing items from your inventory that the NPC would Love or Like as a gift, grouped by desire level and sorted by favor-per-gift value. This also applies for the generic Non-vendors list, though only for ones where data is available
   - **Star/pin vendors** - Click the ★ column to pin a vendor to the top of their region's list (persisted per character)
   - **Vendor Tracker** - Record remaining gold and reset timer per vendor
     - Persisted in localStorage across reloads
