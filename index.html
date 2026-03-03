@@ -1957,12 +1957,11 @@
 
             const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-            // Cross-reference with price tracker
+            // Cross-reference with price tracker (exact name match only)
             const trackedItems = Object.values(vendorPriceTracker.data.items);
-            const matched = trackedItems.filter(item => {
-                const a = item.name.toLowerCase(), b = data.itemName.toLowerCase();
-                return a === b || a.includes(b) || b.includes(a);
-            });
+            const matched = trackedItems.filter(item =>
+                item.name.toLowerCase() === data.itemName.toLowerCase()
+            );
 
             // Sort booths: letter block (A, B, …) then by stall number
             const sortedShops = [...data.shops].sort((a, b) => {
@@ -2033,6 +2032,8 @@
                         vendorPriceTracker._editingItemId = itemId;
                         vendorPriceTracker._editingEntryId = entryId;
                         vendorPriceTracker.openEntryModal();
+                        document.getElementById('priceModalPrice').focus();
+                        document.getElementById('priceModalPrice').select();
                     } else {
                         vendorPriceTracker.quickAddEntry(
                             btn.getAttribute('data-item'),
