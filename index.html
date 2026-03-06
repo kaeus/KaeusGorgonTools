@@ -106,6 +106,7 @@
             <div id="shopsSellCard" style="display:none;"></div>
             <div class="price-toolbar">
                 <input type="text" id="priceSearch" class="price-search" placeholder="🔍 Search tracked items...">
+                <button class="btn-price-sort" id="priceSortBtn" title="Toggle sort order">Sort: Name</button>
                 <button class="btn-add-item" id="addItemBtn">+ Add Item</button>
             </div>
             <div class="price-log-hint">💡 If you're watching <strong>Player.log</strong>, querying the Search Golem in-game will automatically pop up a <em>Shops Selling</em> card here.</div>
@@ -2194,6 +2195,7 @@
             constructor() {
                 this.data = loadPriceTrackerData();
                 this.searchQuery = '';
+                this.sortOrder = 'name';
                 this.expandedItems = new Set();
                 this._editingItemId = null;
                 this._editingEntryId = null;
@@ -2384,6 +2386,16 @@
 
             renderCategory(catId, label, items) {
                 const isExpanded = this.expandedCategories.has(catId);
+                const sorted = [...items].sort((a, b) => {
+                    if (this.sortOrder === 'price') {
+                        const sa = this.calcStats(a.entries);
+                        const sb = this.calcStats(b.entries);
+                        const pa = sa.count > 0 ? sa.lowPrice : Infinity;
+                        const pb = sb.count > 0 ? sb.lowPrice : Infinity;
+                        return pa - pb || a.name.localeCompare(b.name);
+                    }
+                    return a.name.localeCompare(b.name);
+                });
                 return `
                     <div class="price-category">
                         <div class="price-category-header${isExpanded ? ' expanded' : ''}" data-toggle-category="${catId}">
@@ -2392,7 +2404,7 @@
                             <span class="price-category-count">${items.length} item${items.length !== 1 ? 's' : ''}</span>
                         </div>
                         <div class="price-category-body${isExpanded ? ' expanded' : ''}">
-                            ${items.map(item => this.renderItem(item)).join('')}
+                            ${sorted.map(item => this.renderItem(item)).join('')}
                         </div>
                     </div>`;
             }
@@ -2894,6 +2906,12 @@
 
         document.getElementById('priceSearch').addEventListener('input', (e) => {
             vendorPriceTracker.search(e.target.value);
+        });
+
+        document.getElementById('priceSortBtn').addEventListener('click', () => {
+            vendorPriceTracker.sortOrder = vendorPriceTracker.sortOrder === 'name' ? 'price' : 'name';
+            document.getElementById('priceSortBtn').textContent = `Sort: ${vendorPriceTracker.sortOrder === 'name' ? 'Name' : 'Low Price'}`;
+            vendorPriceTracker.render();
         });
 
         document.getElementById('addItemBtn').addEventListener('click', () => {

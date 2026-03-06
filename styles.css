@@ -1966,6 +1966,24 @@ button {
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
+.btn-price-sort {
+    padding: 12px 16px;
+    background: #3a3a3a;
+    color: #ccc;
+    border: 1px solid #555;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    font-size: 0.95em;
+    transition: all 0.2s;
+}
+
+.btn-price-sort:hover {
+    background: #484848;
+    color: #fff;
+}
+
 .btn-add-item {
     padding: 12px 20px;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
