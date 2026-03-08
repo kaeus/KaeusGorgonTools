@@ -18,6 +18,7 @@
             <a href="maps.html">Interactive Maps</a>
             <a href="chat-watcher.html">Chat Watcher</a>
             <a href="dps.html">Combat Tracker</a>
+            <a href="timers.html">Timers</a>
         </div>
 
         <div class="file-loader">
@@ -94,6 +95,8 @@
                     <div class="label">Storage Vaults</div>
                 </div>
             </div>
+
+            <div id="storageOverview" style="display: none;"></div>
 
             <div id="inventorySearchBar" class="search-bar" style="display: none;">
                 <input type="text" id="inventorySearch" placeholder="🔍 Search items by name...">
@@ -321,19 +324,28 @@
 
             async loadInventoryData() {
                 // Check in-memory cache first
-                if (this.cdnItemsData && this.storageVaultsData) {
+                if (this.cdnItemsData && this.storageVaultsData && this.areasData) {
                     return; // Already loaded in this session
                 }
 
                 // Fetch from CDN
-                const [itemsRaw, vaultsRaw] = await Promise.all([
+                const [itemsRaw, vaultsRaw, areasRaw] = await Promise.all([
                     this.fetchCDNData('items.json'),
-                    this.fetchCDNData('storagevaults.json')
+                    this.fetchCDNData('storagevaults.json'),
+                    this.fetchCDNData('areas.json')
                 ]);
 
                 // items.json is already keyed by "Item_{TypeId}" — store as-is
                 this.cdnItemsData = itemsRaw;
                 this.storageVaultsData = this.processToKeyedLookup(vaultsRaw, 'InternalName') || vaultsRaw;
+                this.areasData = areasRaw; // already keyed by area key (e.g. "AreaSerbule")
+            }
+
+            getAreaName(areaKey) {
+                if (!areaKey) return null;
+                const entry = this.areasData?.[areaKey];
+                if (!entry) return null;
+                return entry.ShortFriendlyName || entry.FriendlyName || null;
             }
 
             getItemDetails(typeId) {
@@ -342,10 +354,13 @@
             }
 
             getVaultName(internalName) {
-                if (!this.storageVaultsData || !this.storageVaultsData[internalName]) {
-                    return internalName || 'Inventory';
-                }
-                return this.storageVaultsData[internalName].Name || internalName;
+                const vault = this.storageVaultsData?.[internalName];
+                if (!vault) return internalName || 'Unknown';
+                return vault.NpcFriendlyName || vault.Name || internalName;
+            }
+
+            getVaultArea(internalName) {
+                return this.storageVaultsData?.[internalName]?.Grouping || this.storageVaultsData?.[internalName]?.Area || null;
             }
 
             // Scan for all Character_*.json files; returns array sorted newest-first
@@ -711,18 +726,25 @@
                 // Build item list with details
                 this.allItems = this.dataLoader.itemsData.Items.map(item => {
                     const itemDetails = this.dataLoader.getItemDetails(item.TypeID);
-                    const vaultName = this.dataLoader.getVaultName(item.StorageVault);
-
-                    return {
-                        ...item,
-                        details: itemDetails,
-                        vaultName
-                    };
+                    const vaultKey = item.StorageVault;
+                    const isPersonal = item.IsInInventory == true || vaultKey === 'Saddlebag';
+                    const vaultName = isPersonal
+                        ? (vaultKey === 'Saddlebag' ? 'Saddlebag' : 'Character Inventory')
+                        : this.dataLoader.getVaultName(vaultKey);
+                    const rawArea = isPersonal ? null : this.dataLoader.getVaultArea(vaultKey);
+                    const vaultArea = isPersonal ? '__inventory__'
+                        : rawArea === '*' ? '__portable__'
+                        : rawArea || '__unknown__';
+                        console.log(isPersonal, rawArea, item.Name)
+                    return { ...item, details: itemDetails, vaultName, vaultArea };
                 });
+
+                console.log(this.allItems)
 
                 this.filteredItems = [...this.allItems];
                 this.render();
                 this.updateStats();
+                this.renderStorageOverview();
             }
 
             updateStats() {
@@ -764,35 +786,75 @@
                     return;
                 }
 
-                // Group items by StorageVault
-                const groupedItems = this.groupByVault(this.filteredItems);
+                // Group by area, then by vault within each area
+                const byArea = {};
+                for (const item of this.filteredItems) {
+                    const area = item.vaultArea || '__unknown__';
+                    const vault = item.vaultName || 'Unknown';
+                    if (!byArea[area]) byArea[area] = {};
+                    if (!byArea[area][vault]) byArea[area][vault] = [];
+                    byArea[area][vault].push(item);
+                }
 
-                // Render accordions for each vault
-                container.innerHTML = Object.entries(groupedItems)
-                    .sort(([a], [b]) => a.localeCompare(b))
-                    .map(([vault, items]) => this.renderVaultAccordion(vault, items))
-                    .join('');
+                const prettyArea = key => {
+                    if (key === '__inventory__') return 'Inventory';
+                    if (key === '__portable__') return 'Portable Storage';
+                    if (key === '__unknown__') return 'Other';
+                    return this.dataLoader.getAreaName(key)
+                        || key.replace(/^Area/, '').replace(/([A-Z])/g, ' $1').replace(/(\d+)/g, ' $1').trim().replace(/\s+/g, ' ')
+                        || key;
+                };
+
+                const areaOrder = Object.keys(byArea).sort((a, b) => {
+                    if (a === '__inventory__') return -1;
+                    if (b === '__inventory__') return 1;
+                    if (a === '__unknown__') return 1;
+                    if (b === '__unknown__') return -1;
+                    return prettyArea(a).localeCompare(prettyArea(b));
+                });
+
+                container.innerHTML = areaOrder.map(areaKey => {
+                    const vaults = byArea[areaKey];
+                    const areaId = `area-${areaKey.replace(/\W/g, '-').toLowerCase()}`;
+                    const allAreaItems = Object.values(vaults).flat();
+                    const areaCount = allAreaItems.length;
+                    const areaValue = allAreaItems.reduce((s, i) => s + (i.Value || 0) * (i.StackSize || 1), 0);
+
+                    const vaultHtml = Object.entries(vaults)
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .map(([vault, items]) => this.renderVaultAccordion(vault, items, true))
+                        .join('');
+
+                    return `
+                        <div class="location-accordion">
+                            <div class="accordion-header" data-accordion="${areaId}">
+                                <div class="accordion-title">
+                                    <span>${prettyArea(areaKey)}</span>
+                                    <span class="quest-count-badge">${areaCount} items</span>
+                                </div>
+                                <div class="accordion-icon">▼</div>
+                            </div>
+                            <div id="${areaId}" class="accordion-content">
+                                <div class="area-vaults-content">
+                                    ${vaultHtml}
+                                    <div class="vault-summary">
+                                        <span class="vault-summary-label">Area Total:</span>
+                                        <span class="vault-summary-value">💰 ${areaValue.toLocaleString()}g</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
 
                 // Add click handlers for accordions
                 this.attachAccordionHandlers();
             }
 
-            groupByVault(items) {
-                const grouped = {};
-                for (const item of items) {
-                    const vault = item.vaultName || 'Unknown Vault';
-                    if (!grouped[vault]) {
-                        grouped[vault] = [];
-                    }
-                    grouped[vault].push(item);
-                }
-                return grouped;
-            }
-
-            renderVaultAccordion(vault, items) {
-                const accordionId = `vault-${vault.replace(/\s+/g, '-').toLowerCase()}`;
+            renderVaultAccordion(vault, items, nested = false) {
+                const accordionId = `vault-${vault.replace(/\W/g, '-').toLowerCase()}`;
                 const totalValue = items.reduce((sum, item) => sum + ((item.Value || 0) * (item.StackSize || 1)), 0);
-                const totalCount = items.reduce((sum, item) => sum + 1, 0);
+                const totalCount = items.length;
 
                 // Sort items by total value (descending)
                 const sortedItems = [...items].sort((a, b) => {
@@ -802,8 +864,8 @@
                 });
 
                 return `
-                    <div class="location-accordion">
-                        <div class="accordion-header" data-accordion="${accordionId}">
+                    <div class="location-accordion${nested ? ' nested-vault-accordion' : ''}">
+                        <div class="accordion-header${nested ? ' nested-vault-header' : ''}" data-accordion="${accordionId}">
                             <div class="accordion-title">
                                 <span>🗄️ ${vault}</span>
                                 <span class="quest-count-badge">${totalCount} items</span>
@@ -886,6 +948,162 @@
                         // Toggle active state
                         header.classList.toggle('active');
                         content.classList.toggle('active');
+                    });
+                });
+            }
+
+            renderStorageOverview() {
+                const container = document.getElementById('storageOverview');
+                if (!container) return;
+
+                const vaultsData = this.dataLoader.storageVaultsData;
+                if (!vaultsData) return;
+
+                const FAVOR_ORDER = ['Despised','Hated','Disliked','Tolerated','Neutral','Comfortable','Friends','CloseFriends','BestFriends','LikeFamily','SoulMates'];
+                const FAVOR_DISPLAY = {Despised:'Despised',Hated:'Hated',Disliked:'Disliked',Tolerated:'Tolerated',Neutral:'Neutral',Comfortable:'Comfortable',Friends:'Friends',CloseFriends:'Close Friends',BestFriends:'Best Friends',LikeFamily:'Like Family',SoulMates:'Soul Mates'};
+
+                // Only NPC entries have a Levels object
+                const npcEntries = Object.entries(vaultsData)
+                    .filter(([, val]) => val.Levels && Object.keys(val.Levels).length > 0)
+                    .map(([key, val]) => ({ key, ...val }));
+
+                if (npcEntries.length === 0) { container.style.display = 'none'; return; }
+
+                // Look up current favor: vendorData (storeBrowser global) → characterData.NPCs
+                const getFavor = (key) => {
+                    const vd = typeof storeBrowser !== 'undefined' ? storeBrowser.vendorData : {};
+                    return vd[key]?.favorLevel || this.dataLoader.characterData?.NPCs?.[key]?.FavorLevel || null;
+                };
+
+                // Current slots: exact tier or next-lower tier that exists in Levels
+                const getCurrentSlots = (levels, favor) => {
+                    if (!favor) return null;
+                    if (levels[favor] !== undefined) return levels[favor];
+                    const idx = FAVOR_ORDER.indexOf(favor);
+                    for (let i = idx - 1; i >= 0; i--) {
+                        if (levels[FAVOR_ORDER[i]] !== undefined) return levels[FAVOR_ORDER[i]];
+                    }
+                    return null;
+                };
+
+                // Strip "Area" prefix and split camelCase + digits into words
+                const prettyArea = (key) => this.dataLoader.getAreaName(key)
+                    || key.replace(/^Area/, '').replace(/([A-Z])/g, ' $1').replace(/(\d+)/g, ' $1').trim().replace(/\s+/g, ' ')
+                    || key;
+
+                // Group by Grouping (same as Area for most entries)
+                const byArea = {};
+                for (const e of npcEntries) {
+                    const ak = e.Grouping || e.Area || 'Unknown';
+                    (byArea[ak] = byArea[ak] || []).push(e);
+                }
+
+                // Preserve which area accordions are open across re-renders
+                const openAreas = new Set(
+                    [...container.querySelectorAll('.storage-area-content.active')].map(el => el.id)
+                );
+                const rootOpen = container.querySelector('.storage-root-content')?.classList.contains('active');
+
+                const areaSections = Object.entries(byArea)
+                    .sort(([a], [b]) => prettyArea(a).localeCompare(prettyArea(b)))
+                    .map(([areaKey, npcs]) => {
+                        const areaId = `storage-area-${areaKey.replace(/\W/g, '-')}`;
+                        const isOpen = openAreas.has(areaId); // collapsed by default
+                        let areaTotal = 0;
+                        const rows = npcs
+                            .sort((a, b) => (a.NpcFriendlyName || a.key).localeCompare(b.NpcFriendlyName || b.key))
+                            .map(entry => {
+                                const favor = getFavor(entry.key);
+                                const slots = getCurrentSlots(entry.Levels, favor);
+                                if (slots !== null) areaTotal += slots;
+                                const badge = favor
+                                    ? `<span class="favor-badge favor-${favor.toLowerCase()}">${FAVOR_DISPLAY[favor] || favor}</span>`
+                                    : `<span class="favor-badge favor-unknown">Not Met</span>`;
+                                const slotsHtml = slots !== null ? `<span class="storage-npc-slots">${slots} slots</span>` : '';
+
+                                const tipRows = FAVOR_ORDER
+                                    .filter(lv => entry.Levels[lv] !== undefined)
+                                    .map(lv => {
+                                        const cur = lv === favor;
+                                        return `<tr class="${cur ? 'storage-level-row-current' : ''}"><td class="storage-tier-label">${cur ? '▶ ' : ''}${FAVOR_DISPLAY[lv]}</td><td class="storage-tier-slots">${entry.Levels[lv]} slots</td></tr>`;
+                                    }).join('');
+
+                                const tipId = `stip-${entry.key.replace(/\W/g, '-')}`;
+                                return `<div class="storage-npc-row" data-storage-key="${entry.key}">
+                                    <span class="storage-npc-name">${entry.NpcFriendlyName || entry.key}</span>
+                                    ${badge}${slotsHtml}
+                                    <div class="tooltip-container" id="${tipId}">
+                                        <button class="tooltip-btn" data-tip="${tipId}">?</button>
+                                        <div class="tooltip-content storage-tip-content">
+                                            <div class="tooltip-title">${entry.NpcFriendlyName || entry.key}</div>
+                                            <table class="storage-level-table"><tbody>${tipRows}</tbody></table>
+                                        </div>
+                                    </div>
+                                </div>`;
+                            }).join('');
+                        const totalHtml = areaTotal > 0 ? `<span class="storage-area-total">${areaTotal} slots</span>` : '';
+                        return `<div>
+                            <div class="storage-area-header${isOpen ? ' active' : ''}" data-storage-area="${areaId}">
+                                <span>${prettyArea(areaKey)}${totalHtml ? ' ' + totalHtml : ''}</span>
+                                <span class="accordion-icon">▼</span>
+                            </div>
+                            <div id="${areaId}" class="storage-area-content${isOpen ? ' active' : ''}">${rows}</div>
+                        </div>`;
+                    }).join('');
+
+                container.innerHTML = `<div class="storage-overview">
+                    <div class="storage-root-header${rootOpen ? ' active' : ''}" data-storage-root="storage-root-content">
+                        <span class="storage-overview-title">NPC Storage Overview</span>
+                        <span class="accordion-icon">▼</span>
+                    </div>
+                    <div id="storage-root-content" class="storage-root-content${rootOpen ? ' active' : ''}">${areaSections}</div>
+                </div>`;
+                container.style.display = 'block';
+
+                // Root accordion toggle
+                container.querySelector('[data-storage-root]').addEventListener('click', () => {
+                    const header = container.querySelector('[data-storage-root]');
+                    const content = container.querySelector('#storage-root-content');
+                    header.classList.toggle('active');
+                    content.classList.toggle('active');
+                });
+
+                // Area accordion toggles
+                container.querySelectorAll('[data-storage-area]').forEach(header => {
+                    header.addEventListener('click', (e) => {
+                        if (e.target.closest('.tooltip-container')) return;
+                        const areaId = header.getAttribute('data-storage-area');
+                        const content = document.getElementById(areaId);
+                        header.classList.toggle('active');
+                        content.classList.toggle('active');
+                    });
+                });
+
+                // Tooltip toggle handlers
+                if (!this._storageDocClick) {
+                    this._storageDocClick = true;
+                    document.addEventListener('click', (e) => {
+                        if (!e.target.closest('#storageOverview .tooltip-container')) {
+                            container.querySelectorAll('.tooltip-container.tooltip-open').forEach(tc => {
+                                tc.classList.remove('tooltip-open');
+                                tc.querySelector('.tooltip-btn')?.classList.remove('tooltip-active');
+                            });
+                        }
+                    });
+                }
+                container.querySelectorAll('.tooltip-btn[data-tip]').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const tc = btn.closest('.tooltip-container');
+                        const wasOpen = tc.classList.contains('tooltip-open');
+                        container.querySelectorAll('.tooltip-container.tooltip-open').forEach(c => {
+                            c.classList.remove('tooltip-open');
+                            c.querySelector('.tooltip-btn')?.classList.remove('tooltip-active');
+                        });
+                        if (!wasOpen) {
+                            tc.classList.add('tooltip-open');
+                            btn.classList.add('tooltip-active');
+                        }
                     });
                 });
             }
@@ -1003,21 +1221,6 @@
                     const region = entry.area;
                     if (!byRegion[region]) byRegion[region] = [];
                     byRegion[region].push(entry);
-                }
-
-                // Fold in unknown vendors (no CDN match) as synthetic entries
-                const knownKeys = new Set(this.storeNPCs.map(e => e.key));
-                for (const [key, tracked] of Object.entries(this.vendorData)) {
-                    if (!tracked.isUnknown || knownKeys.has(key)) continue;
-                    const region = 'Seen In-Game';
-                    if (!byRegion[region]) byRegion[region] = [];
-                    byRegion[region].push({
-                        key,
-                        npc: { Name: tracked.vendorName || key },
-                        storeService: null,
-                        favorLevel: tracked.favorLevel || null,
-                        area: region
-                    });
                 }
 
                 const vendorsHtml = Object.entries(byRegion)
@@ -1413,7 +1616,10 @@
                     showCaptureToast(`Auto-filled: ${label} — ${remStr} remaining`);
                 }
 
-                if (updated) saveVendorData(this.vendorData);
+                if (updated) {
+                    saveVendorData(this.vendorData);
+                    if (typeof inventoryBrowser !== 'undefined') inventoryBrowser.renderStorageOverview();
+                }
             }
 
             parseCaps(storeService) {

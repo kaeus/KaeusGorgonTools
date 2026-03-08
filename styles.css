@@ -730,6 +730,48 @@ header p {
     color: #667eea;
 }
 
+/* Nested vault accordions inside area accordions */
+.area-vaults-content {
+    padding: 8px 0 4px;
+}
+
+.nested-vault-accordion {
+    margin: 0 0 4px 0;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid #e9ecef;
+}
+
+.nested-vault-header {
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%) !important;
+    padding: 12px 16px !important;
+    font-size: 0.95em;
+}
+
+.nested-vault-header:hover {
+    background: linear-gradient(135deg, #f1f3f5 0%, #e9ecef 100%) !important;
+}
+
+.nested-vault-header.active {
+    background: linear-gradient(135deg, #e8ecff 0%, #d8deff 100%) !important;
+    color: #4a5cc7 !important;
+}
+
+.nested-vault-header.active .accordion-title {
+    color: #4a5cc7 !important;
+}
+
+.nested-vault-header.active .accordion-icon {
+    color: #4a5cc7 !important;
+}
+
+/* Compact area-level vault summary */
+.area-vaults-content > .vault-summary {
+    margin: 8px 0 4px;
+    padding: 10px 12px;
+    font-size: 0.9em;
+}
+
 /* Stores Browser */
 .stores-browser {
     padding: 30px;
@@ -2528,4 +2570,140 @@ button {
 }
 .shops-price-known:hover {
     background: #0d3d17;
+}
+
+/* ── Storage Overview ─────────────────────────────────────────────────── */
+#storageOverview {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    margin-bottom: 12px;
+    overflow: visible;
+}
+.storage-overview {
+    padding: 0;
+}
+.storage-root-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    padding: 8px 12px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 8px;
+    user-select: none;
+    transition: background 0.2s;
+}
+.storage-root-header.active {
+    border-radius: 8px 8px 0 0;
+    border-bottom: 1px solid #dee2e6;
+}
+.storage-root-header:hover { background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%); }
+.storage-root-header .accordion-icon {
+    font-size: 0.8em;
+    color: #6c757d;
+    transition: transform 0.2s;
+}
+.storage-root-header.active .accordion-icon { transform: rotate(180deg); }
+.storage-overview-title {
+    font-size: 0.75em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #495057;
+}
+.storage-root-content {
+    display: none;
+    padding: 8px 12px 10px;
+}
+.storage-root-content.active {
+    display: block;
+}
+.storage-area-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8em;
+    font-weight: 700;
+    color: #495057;
+    padding: 5px 4px;
+    border-bottom: 1px solid #e9ecef;
+    margin-bottom: 2px;
+    cursor: pointer;
+    user-select: none;
+    border-radius: 3px;
+}
+.storage-area-header:hover { background: #f1f3f5; }
+.storage-area-header .accordion-icon {
+    font-size: 0.8em;
+    color: #868e96;
+    transition: transform 0.2s;
+}
+.storage-area-header.active .accordion-icon { transform: rotate(180deg); }
+.storage-area-total {
+    font-size: 0.85em;
+    font-weight: 600;
+    color: #667eea;
+    background: rgba(102, 126, 234, 0.1);
+    border-radius: 10px;
+    padding: 1px 7px;
+    margin-left: 5px;
+}
+.storage-area-content {
+    display: none;
+    padding-bottom: 4px;
+}
+.storage-area-content.active {
+    display: block;
+}
+.storage-npc-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 3px 0;
+    font-size: 0.88em;
+}
+.storage-npc-name {
+    flex: 1;
+    color: #212529;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+.storage-npc-slots {
+    font-size: 0.85em;
+    color: #495057;
+    font-weight: 600;
+    white-space: nowrap;
+}
+/* Narrow tooltip for storage tier table */
+.storage-tip-content {
+    min-width: 220px !important;
+    max-width: 280px;
+    z-index: 1000;
+}
+.storage-level-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 4px;
+}
+.storage-level-table td {
+    padding: 4px 12px;
+    font-size: 0.85em;
+    border-top: 1px solid #f0f0f0;
+}
+.storage-level-row-current td {
+    background: #e8f4fd;
+    font-weight: 700;
+    color: #0066cc;
+}
+.storage-tier-label {
+    color: #495057;
+}
+.storage-tier-slots {
+    text-align: right;
+    color: #212529;
+    white-space: nowrap;
 }

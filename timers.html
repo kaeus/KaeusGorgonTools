@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Gorgon: Boss & Chest Timers</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .timers-controls {
+            padding: 20px 30px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .toggle-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 6px 12px;
+        }
+
+        .toggle-group label {
+            font-size: 0.9em;
+            font-weight: 600;
+            color: #495057;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .toggle-group input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+
+        .timers-controls .btn-primary {
+            margin-left: auto;
+        }
+
+        .timers-body {
+            padding: 30px;
+        }
+
+        /* Add Entry Form */
+        .add-entry-form {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+            display: none;
+        }
+
+        .add-entry-form.visible {
+            display: block;
+        }
+
+        .add-entry-form h3 {
+            margin-bottom: 16px;
+            color: #495057;
+            font-size: 1.1em;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .form-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .form-field label {
+            font-size: 0.8em;
+            font-weight: 600;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .form-field input,
+        .form-field select {
+            padding: 8px 10px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            font-size: 0.95em;
+            min-width: 140px;
+        }
+
+        .form-field input:focus,
+        .form-field select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102,126,234,0.2);
+        }
+
+        .form-field.name-field input {
+            min-width: 200px;
+        }
+
+        .cooldown-inputs {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .cooldown-inputs input {
+            width: 60px;
+        }
+
+        .cooldown-inputs span {
+            font-size: 0.8em;
+            color: #6c757d;
+        }
+
+        /* Area groups */
+        .area-group {
+            margin-bottom: 28px;
+        }
+
+        .area-group-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 8px 8px 0 0;
+            font-weight: 700;
+            font-size: 1.05em;
+        }
+
+        .area-group-header .area-count {
+            font-size: 0.8em;
+            opacity: 0.75;
+            font-weight: 400;
+        }
+
+        .area-group-entries {
+            border: 1px solid #dee2e6;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            overflow: hidden;
+        }
+
+        /* Timer entry */
+        .timer-entry {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 16px;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background 0.15s;
+        }
+
+        .timer-entry:last-child {
+            border-bottom: none;
+        }
+
+        .timer-entry:hover {
+            background: #fafafa;
+        }
+
+        .entry-type-badge {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1em;
+            flex-shrink: 0;
+        }
+
+        .entry-type-badge.boss {
+            background: #fff0f0;
+        }
+
+        .entry-type-badge.chest {
+            background: #fff8e6;
+        }
+
+        .entry-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .entry-name {
+            font-weight: 600;
+            color: #212529;
+            font-size: 0.95em;
+        }
+
+        .entry-cooldown-label {
+            font-size: 0.78em;
+            color: #6c757d;
+            margin-top: 2px;
+        }
+
+        /* Countdown display */
+        .timer-countdown {
+            text-align: center;
+            min-width: 110px;
+        }
+
+        .countdown-time {
+            font-size: 1.25em;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 0.02em;
+        }
+
+        .countdown-time.ready {
+            color: #28a745;
+        }
+
+        .countdown-time.soon {
+            color: #fd7e14;
+        }
+
+        .countdown-time.waiting {
+            color: #dc3545;
+        }
+
+        .countdown-time.idle {
+            color: #adb5bd;
+            font-size: 0.9em;
+        }
+
+        .countdown-label {
+            font-size: 0.72em;
+            color: #6c757d;
+            margin-top: 2px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        /* Action buttons */
+        .entry-actions {
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        .btn-action {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.82em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s, transform 0.1s;
+        }
+
+        .btn-action:active {
+            transform: scale(0.96);
+        }
+
+        .btn-kill {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-kill:hover {
+            background: #c82333;
+        }
+
+        .btn-loot {
+            background: #fd7e14;
+            color: white;
+        }
+
+        .btn-loot:hover {
+            background: #e96c04;
+        }
+
+        .btn-reset-timer {
+            background: #e9ecef;
+            color: #495057;
+        }
+
+        .btn-reset-timer:hover {
+            background: #dee2e6;
+        }
+
+        .btn-delete {
+            background: none;
+            color: #adb5bd;
+            border: 1px solid #dee2e6;
+        }
+
+        .btn-delete:hover {
+            color: #dc3545;
+            border-color: #dc3545;
+        }
+
+        /* Last triggered time */
+        .last-triggered {
+            font-size: 0.75em;
+            color: #adb5bd;
+            min-width: 80px;
+            text-align: right;
+        }
+
+        /* Notification toasts */
+        #toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 9999;
+            pointer-events: none;
+        }
+
+        .toast {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.18);
+            padding: 14px 18px;
+            max-width: 320px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            pointer-events: all;
+            animation: slideIn 0.3s ease;
+            border-left: 4px solid #28a745;
+        }
+
+        .toast.boss-toast {
+            border-left-color: #dc3545;
+        }
+
+        .toast.chest-toast {
+            border-left-color: #fd7e14;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(120px); opacity: 0; }
+            to   { transform: translateX(0); opacity: 1; }
+        }
+
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to   { transform: translateX(120px); opacity: 0; }
+        }
+
+        .toast.removing {
+            animation: slideOut 0.3s ease forwards;
+        }
+
+        .toast-icon {
+            font-size: 1.4em;
+            line-height: 1;
+        }
+
+        .toast-body {
+            flex: 1;
+        }
+
+        .toast-title {
+            font-weight: 700;
+            font-size: 0.9em;
+            color: #212529;
+        }
+
+        .toast-msg {
+            font-size: 0.82em;
+            color: #6c757d;
+            margin-top: 3px;
+        }
+
+        .toast-close {
+            background: none;
+            border: none;
+            color: #adb5bd;
+            cursor: pointer;
+            font-size: 1em;
+            padding: 0;
+            line-height: 1;
+            pointer-events: all;
+        }
+
+        .toast-close:hover {
+            color: #495057;
+        }
+
+        /* Buttons from shared style supplement */
+        .btn-primary {
+            padding: 8px 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+
+        .btn-primary:hover {
+            opacity: 0.9;
+        }
+
+        .btn-secondary {
+            padding: 8px 16px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⏱️ Boss & Chest Timers</h1>
+            <p>Track respawn and chest cooldowns by area</p>
+        </header>
+
+        <div class="nav">
+            <a href="index.html">Quest/Inventory Tracker</a>
+            <a href="maps.html">Interactive Maps</a>
+            <a href="chat-watcher.html">Chat Watcher</a>
+            <a href="dps.html">Combat Tracker</a>
+            <b>Timers</b>
+        </div>
+
+        <div class="timers-controls">
+            <div class="toggle-group">
+                <input type="checkbox" id="toggleSound">
+                <label for="toggleSound">🔊 Sound Alerts</label>
+            </div>
+            <div class="toggle-group">
+                <input type="checkbox" id="toggleNotifications">
+                <label for="toggleNotifications">🔔 Notifications</label>
+            </div>
+            <button class="btn-primary" onclick="timerApp.showAddForm()">+ Add Boss / Chest</button>
+        </div>
+
+        <div class="timers-body">
+            <div class="add-entry-form" id="addEntryForm">
+                <h3>Add New Entry</h3>
+                <div class="form-row">
+                    <div class="form-field name-field">
+                        <label>Name</label>
+                        <input type="text" id="entryName" placeholder="e.g. Fae Witch">
+                    </div>
+                    <div class="form-field">
+                        <label>Type</label>
+                        <select id="entryType">
+                            <option value="boss">Boss</option>
+                            <option value="chest">Chest</option>
+                        </select>
+                    </div>
+                    <div class="form-field">
+                        <label>Area</label>
+                        <select id="entryArea">
+                            <option value="">Loading areas…</option>
+                        </select>
+                    </div>
+                    <div class="form-field">
+                        <label>Cooldown</label>
+                        <div class="cooldown-inputs">
+                            <input type="number" id="cooldownHours" min="0" value="0" placeholder="0">
+                            <span>h</span>
+                            <input type="number" id="cooldownMinutes" min="0" max="59" value="30" placeholder="30">
+                            <span>m</span>
+                            <input type="number" id="cooldownSeconds" min="0" max="59" value="0" placeholder="0">
+                            <span>s</span>
+                        </div>
+                    </div>
+                    <div class="form-field" style="flex-direction: row; gap: 8px; align-items: flex-end;">
+                        <button class="btn-primary" onclick="timerApp.addEntry()">Add</button>
+                        <button class="btn-secondary" onclick="timerApp.hideAddForm()">Cancel</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="timersContent">
+                <div class="empty-state">
+                    <div class="empty-state-icon">⏱️</div>
+                    <h3>No timers yet</h3>
+                    <p>Click "Add Boss / Chest" to track your first cooldown.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script>
+    const STORAGE_KEY = 'gorgon-timers-entries';
+    const SETTINGS_KEY = 'gorgon-timers-settings';
+
+    // Simple beep via Web Audio API — no external file needed
+    function playBeep() {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, ctx.currentTime);
+            gain.gain.setValueAtTime(0.4, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.4);
+        } catch (e) { /* audio not available */ }
+    }
+
+    function showToast(title, msg, type) {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}-toast`;
+        toast.innerHTML = `
+            <div class="toast-icon">${type === 'boss' ? '💀' : '📦'}</div>
+            <div class="toast-body">
+                <div class="toast-title">${title}</div>
+                <div class="toast-msg">${msg}</div>
+            </div>
+            <button class="toast-close" onclick="this.closest('.toast').remove()">✕</button>
+        `;
+        container.appendChild(toast);
+        setTimeout(() => {
+            toast.classList.add('removing');
+            toast.addEventListener('animationend', () => toast.remove());
+        }, 6000);
+    }
+
+    function formatDuration(ms) {
+        if (ms <= 0) return null;
+        const totalSec = Math.ceil(ms / 1000);
+        const h = Math.floor(totalSec / 3600);
+        const m = Math.floor((totalSec % 3600) / 60);
+        const s = totalSec % 60;
+        if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        return `${m}:${String(s).padStart(2,'0')}`;
+    }
+
+    function formatCooldownLabel(ms) {
+        const totalSec = Math.round(ms / 1000);
+        const h = Math.floor(totalSec / 3600);
+        const m = Math.floor((totalSec % 3600) / 60);
+        const s = totalSec % 60;
+        let parts = [];
+        if (h) parts.push(`${h}h`);
+        if (m) parts.push(`${m}m`);
+        if (s || parts.length === 0) parts.push(`${s}s`);
+        return parts.join(' ');
+    }
+
+    function formatAgo(ts) {
+        const diff = Math.floor((Date.now() - ts) / 1000);
+        if (diff < 60) return `${diff}s ago`;
+        if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+        return `${Math.floor(diff/3600)}h ago`;
+    }
+
+    class TimerApp {
+        constructor() {
+            this.entries = [];      // { id, name, type, area, cooldownMs, lastTriggeredAt }
+            this.areas = [];
+            this.tickInterval = null;
+            this.notifiedIds = new Set(); // entries already notified this cycle
+            this.load();
+            this.loadSettings();
+            this.fetchAreas();
+            this.startTick();
+            this.cdnBaseUrl = 'https://cdn.projectgorgon.com/v459/data/';
+            this._cdnVersionResolved = false;
+        }
+
+        load() {
+            try {
+                this.entries = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            } catch { this.entries = []; }
+        }
+
+        save() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(this.entries));
+        }
+
+        loadSettings() {
+            try {
+                const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+                document.getElementById('toggleSound').checked = !!s.sound;
+                document.getElementById('toggleNotifications').checked = !!s.notifications;
+            } catch {}
+            document.getElementById('toggleSound').addEventListener('change', () => this.saveSettings());
+            document.getElementById('toggleNotifications').addEventListener('change', async (e) => {
+                if (e.target.checked) {
+                    if (!('Notification' in window)) {
+                        alert('Browser notifications are not supported in this browser.');
+                        e.target.checked = false;
+                    } else if (Notification.permission !== 'granted') {
+                        const perm = await Notification.requestPermission();
+                        if (perm !== 'granted') {
+                            e.target.checked = false;
+                        }
+                    }
+                }
+                this.saveSettings();
+            });
+        }
+
+        saveSettings() {
+            localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+                sound: document.getElementById('toggleSound').checked,
+                notifications: document.getElementById('toggleNotifications').checked,
+            }));
+        }
+
+        async fetchAreas() {
+            try {
+                await this.resolveCdnBaseUrl();
+                const resp = await fetch(`${this.cdnBaseUrl}areas.json`);
+                const data = await resp.json();
+                // areas.json is keyed by area key; value has .FriendlyName
+                const seen = new Set();
+                this.areas = Object.entries(data)
+                    .map(([key, val]) => ({ key, name: val.FriendlyName || key }))
+                    .filter(a => a.name)
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .filter(a => seen.has(a.name) ? false : seen.add(a.name));
+            } catch (e) {
+                console.warn('Could not fetch areas.json, using empty list', e);
+                this.areas = [];
+            }
+            this.populateAreaSelect();
+        }
+
+        async resolveCdnBaseUrl() {
+            if (this._cdnVersionResolved) return;
+            this._cdnVersionResolved = true; // mark early to avoid concurrent calls
+            try {
+                const res = await fetch('https://cdn.projectgorgon.com/', { redirect: 'follow' });
+                const match = res.url.match(/\/(v\d+)\//);
+                if (match) {
+                    this.cdnBaseUrl = `https://cdn.projectgorgon.com/${match[1]}/data/`;
+                    console.log('[CDN] Auto-detected version:', match[1], '→', this.cdnBaseUrl);
+                }
+            } catch (e) {
+                console.warn('[CDN] Could not auto-detect version, using fallback:', this.cdnBaseUrl, e);
+            }
+        }
+
+        populateAreaSelect() {
+            const sel = document.getElementById('entryArea');
+            sel.innerHTML = this.areas.length
+                ? this.areas.map(a => `<option value="${a.key}">${a.name}</option>`).join('')
+                : '<option value="">No areas available</option>';
+        }
+
+        showAddForm() {
+            document.getElementById('addEntryForm').classList.add('visible');
+            document.getElementById('entryName').focus();
+        }
+
+        hideAddForm() {
+            document.getElementById('addEntryForm').classList.remove('visible');
+        }
+
+        addEntry() {
+            const name = document.getElementById('entryName').value.trim();
+            const type = document.getElementById('entryType').value;
+            const areaKey = document.getElementById('entryArea').value;
+            const h = parseInt(document.getElementById('cooldownHours').value) || 0;
+            const m = parseInt(document.getElementById('cooldownMinutes').value) || 0;
+            const s = parseInt(document.getElementById('cooldownSeconds').value) || 0;
+            const cooldownMs = (h * 3600 + m * 60 + s) * 1000;
+
+            if (!name) { document.getElementById('entryName').focus(); return; }
+            if (!areaKey) { alert('Please select an area.'); return; }
+            if (cooldownMs <= 0) { alert('Please set a cooldown greater than 0.'); return; }
+
+            const areaObj = this.areas.find(a => a.key === areaKey);
+            this.entries.push({
+                id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+                name,
+                type,
+                area: areaKey,
+                areaName: areaObj ? areaObj.name : areaKey,
+                cooldownMs,
+                lastTriggeredAt: null,
+            });
+            this.save();
+            this.hideAddForm();
+            // Reset form
+            document.getElementById('entryName').value = '';
+            document.getElementById('cooldownHours').value = '0';
+            document.getElementById('cooldownMinutes').value = '30';
+            document.getElementById('cooldownSeconds').value = '0';
+            this.render();
+        }
+
+        trigger(id) {
+            const entry = this.entries.find(e => e.id === id);
+            if (!entry) return;
+            entry.lastTriggeredAt = Date.now();
+            this.notifiedIds.delete(id); // allow notification when it becomes ready again
+            this.save();
+            this.render();
+        }
+
+        resetTimer(id) {
+            const entry = this.entries.find(e => e.id === id);
+            if (!entry) return;
+            entry.lastTriggeredAt = null;
+            this.notifiedIds.delete(id);
+            this.save();
+            this.render();
+        }
+
+        deleteEntry(id) {
+            const entry = this.entries.find(e => e.id === id);
+            if (!confirm(`Delete "${entry?.name || 'this entry'}"?`)) return;
+            this.entries = this.entries.filter(e => e.id !== id);
+            this.notifiedIds.delete(id);
+            this.save();
+            this.render();
+        }
+
+        startTick() {
+            this.tickInterval = setInterval(() => this.tick(), 1000);
+        }
+
+        tick() {
+            const now = Date.now();
+            for (const entry of this.entries) {
+                if (!entry.lastTriggeredAt) continue;
+                const elapsed = now - entry.lastTriggeredAt;
+                const remaining = entry.cooldownMs - elapsed;
+                // Fire notification/sound exactly when cooldown just expired
+                if (remaining <= 0 && !this.notifiedIds.has(entry.id)) {
+                    this.notifiedIds.add(entry.id);
+                    this.onCooldownExpired(entry);
+                }
+            }
+            this.updateCountdowns();
+        }
+
+        onCooldownExpired(entry) {
+            const soundOn = document.getElementById('toggleSound').checked;
+            const notifOn = document.getElementById('toggleNotifications').checked;
+            if (soundOn) playBeep();
+            if (notifOn) {
+                const verb = entry.type === 'boss' ? 'can be killed again' : 'can be looted again';
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification(entry.name, {
+                        body: `${entry.name} ${verb}!`,
+                        tag: entry.id,
+                    });
+                } else {
+                    showToast(entry.name, `${entry.name} ${verb}!`, entry.type);
+                }
+            }
+        }
+
+        updateCountdowns() {
+            const now = Date.now();
+            document.querySelectorAll('.timer-entry[data-id]').forEach(el => {
+                const id = el.dataset.id;
+                const entry = this.entries.find(e => e.id === id);
+                if (!entry) return;
+
+                const timeEl = el.querySelector('.countdown-time');
+                const labelEl = el.querySelector('.countdown-label');
+                const lastEl = el.querySelector('.last-triggered');
+                const resetBtn = el.querySelector('.btn-reset-timer');
+
+                if (!entry.lastTriggeredAt) {
+                    timeEl.textContent = '—';
+                    timeEl.className = 'countdown-time idle';
+                    labelEl.textContent = 'not triggered';
+                    if (lastEl) lastEl.textContent = '';
+                    if (resetBtn) resetBtn.style.display = 'none';
+                    return;
+                }
+
+                const elapsed = now - entry.lastTriggeredAt;
+                const remaining = entry.cooldownMs - elapsed;
+                if (lastEl) lastEl.textContent = formatAgo(entry.lastTriggeredAt);
+                if (resetBtn) resetBtn.style.display = '';
+
+                if (remaining <= 0) {
+                    timeEl.textContent = 'READY';
+                    timeEl.className = 'countdown-time ready';
+                    labelEl.textContent = entry.type === 'boss' ? 'kill again' : 'loot again';
+                } else {
+                    const fmt = formatDuration(remaining);
+                    timeEl.textContent = fmt;
+                    // Color: red > 50% remaining, orange 10-50%, green < 10%
+                    const pct = remaining / entry.cooldownMs;
+                    if (pct > 0.5) {
+                        timeEl.className = 'countdown-time waiting';
+                    } else if (pct > 0.1) {
+                        timeEl.className = 'countdown-time soon';
+                    } else {
+                        timeEl.className = 'countdown-time ready';
+                    }
+                    labelEl.textContent = 'remaining';
+                }
+            });
+        }
+
+        render() {
+            const container = document.getElementById('timersContent');
+            if (this.entries.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⏱️</div>
+                        <h3>No timers yet</h3>
+                        <p>Click "Add Boss / Chest" to track your first cooldown.</p>
+                    </div>`;
+                return;
+            }
+
+            // Group by area name (dedup entries with different keys but same display name)
+            const grouped = {};
+            for (const entry of this.entries) {
+                const groupKey = entry.areaName || entry.area;
+                if (!grouped[groupKey]) grouped[groupKey] = { name: entry.areaName, entries: [] };
+                grouped[groupKey].entries.push(entry);
+            }
+
+            const sortedAreas = Object.entries(grouped)
+                .sort(([,a],[,b]) => a.name.localeCompare(b.name));
+
+            container.innerHTML = sortedAreas.map(([areaKey, group]) => `
+                <div class="area-group">
+                    <div class="area-group-header">
+                        📍 ${group.name}
+                        <span class="area-count">(${group.entries.length})</span>
+                    </div>
+                    <div class="area-group-entries">
+                        ${group.entries.map(e => this.renderEntry(e)).join('')}
+                    </div>
+                </div>
+            `).join('');
+
+            this.updateCountdowns();
+        }
+
+        renderEntry(entry) {
+            const icon = entry.type === 'boss' ? '💀' : '📦';
+            const actionBtn = entry.type === 'boss'
+                ? `<button class="btn-action btn-kill" onclick="timerApp.trigger('${entry.id}')">Killed</button>`
+                : `<button class="btn-action btn-loot" onclick="timerApp.trigger('${entry.id}')">Collected</button>`;
+            const coolLabel = formatCooldownLabel(entry.cooldownMs);
+
+            return `
+                <div class="timer-entry" data-id="${entry.id}">
+                    <div class="entry-type-badge ${entry.type}">${icon}</div>
+                    <div class="entry-info">
+                        <div class="entry-name">${entry.name}</div>
+                        <div class="entry-cooldown-label">${coolLabel} cooldown</div>
+                    </div>
+                    <div class="timer-countdown">
+                        <div class="countdown-time idle">—</div>
+                        <div class="countdown-label">not triggered</div>
+                    </div>
+                    <div class="last-triggered"></div>
+                    <div class="entry-actions">
+                        ${actionBtn}
+                        <button class="btn-action btn-reset-timer" style="display:none" onclick="timerApp.resetTimer('${entry.id}')">Reset</button>
+                        <button class="btn-action btn-delete" onclick="timerApp.deleteEntry('${entry.id}')">✕</button>
+                    </div>
+                </div>`;
+        }
+    }
+
+    const timerApp = new TimerApp();
+    timerApp.render();
+    </script>
+</body>
+</html>
