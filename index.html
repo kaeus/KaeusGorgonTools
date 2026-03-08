@@ -735,11 +735,8 @@
                     const vaultArea = isPersonal ? '__inventory__'
                         : rawArea === '*' ? '__portable__'
                         : rawArea || '__unknown__';
-                        console.log(isPersonal, rawArea, item.Name)
                     return { ...item, details: itemDetails, vaultName, vaultArea };
                 });
-
-                console.log(this.allItems)
 
                 this.filteredItems = [...this.allItems];
                 this.render();
@@ -787,13 +784,46 @@
                 }
 
                 // Group by area, then by vault within each area
+                // Also track vault internal key per vault name for capacity lookup
                 const byArea = {};
+                const vaultInternalKey = {}; // vaultName → StorageVault key
                 for (const item of this.filteredItems) {
                     const area = item.vaultArea || '__unknown__';
                     const vault = item.vaultName || 'Unknown';
                     if (!byArea[area]) byArea[area] = {};
                     if (!byArea[area][vault]) byArea[area][vault] = [];
                     byArea[area][vault].push(item);
+                    if (item.StorageVault && !vaultInternalKey[vault]) vaultInternalKey[vault] = item.StorageVault;
+                }
+
+                // Compute capacity per vault internal key (based on current favor)
+                const vaultCapacity = {}; // StorageVault key → slot count
+                const vaultsData = this.dataLoader.storageVaultsData;
+                if (vaultsData) {
+                    const FAVOR_ORDER = ['Despised','Hated','Disliked','Tolerated','Neutral','Comfortable','Friends','CloseFriends','BestFriends','LikeFamily','SoulMates'];
+                    const getFavor = (key) => {
+                        const vd = typeof storeBrowser !== 'undefined' ? storeBrowser.vendorData : {};
+                        return vd[key]?.favorLevel || this.dataLoader.characterData?.NPCs?.[key]?.FavorLevel || null;
+                    };
+                    for (const [vaultKey, vault] of Object.entries(vaultsData)) {
+                        if (!vault.Levels || Object.keys(vault.Levels).length === 0) continue;
+                        const favor = getFavor(vaultKey);
+                        if (!favor) continue;
+                        let slots = vault.Levels[favor];
+                        if (slots === undefined) {
+                            const idx = FAVOR_ORDER.indexOf(favor);
+                            for (let i = idx - 1; i >= 0; i--) {
+                                if (vault.Levels[FAVOR_ORDER[i]] !== undefined) { slots = vault.Levels[FAVOR_ORDER[i]]; break; }
+                            }
+                        }
+                        if (slots !== undefined) vaultCapacity[vaultKey] = slots;
+                    }
+                }
+
+                // True used count per vault from all items (not filtered)
+                const vaultUsed = {}; // StorageVault key → count
+                for (const item of this.allItems) {
+                    if (item.StorageVault) vaultUsed[item.StorageVault] = (vaultUsed[item.StorageVault] || 0) + 1;
                 }
 
                 const prettyArea = key => {
@@ -822,7 +852,12 @@
 
                     const vaultHtml = Object.entries(vaults)
                         .sort(([a], [b]) => a.localeCompare(b))
-                        .map(([vault, items]) => this.renderVaultAccordion(vault, items, true))
+                        .map(([vault, items]) => {
+                            const iKey = vaultInternalKey[vault];
+                            const cap = iKey != null ? vaultCapacity[iKey] : undefined;
+                            const empty = cap != null ? cap - (vaultUsed[iKey] || 0) : null;
+                            return this.renderVaultAccordion(vault, items, true, empty);
+                        })
                         .join('');
 
                     return `
@@ -851,10 +886,14 @@
                 this.attachAccordionHandlers();
             }
 
-            renderVaultAccordion(vault, items, nested = false) {
+            renderVaultAccordion(vault, items, nested = false, emptySlots = null) {
                 const accordionId = `vault-${vault.replace(/\W/g, '-').toLowerCase()}`;
                 const totalValue = items.reduce((sum, item) => sum + ((item.Value || 0) * (item.StackSize || 1)), 0);
                 const totalCount = items.length;
+
+                const emptyBadge = emptySlots != null
+                    ? `<span class="empty-slots-badge${emptySlots === 0 ? ' full' : ''}">${emptySlots} empty</span>`
+                    : '';
 
                 // Sort items by total value (descending)
                 const sortedItems = [...items].sort((a, b) => {
@@ -869,6 +908,7 @@
                             <div class="accordion-title">
                                 <span>🗄️ ${vault}</span>
                                 <span class="quest-count-badge">${totalCount} items</span>
+                                ${emptyBadge}
                             </div>
                             <div class="accordion-icon">▼</div>
                         </div>
@@ -2117,10 +2157,12 @@
         // Maps numeric npcId → internal key e.g. 12485 → "NPC_Ragabir"
         // Populated by ProcessStartInteraction lines that precede vendor screen opens.
         const npcIdToKeyMap = {};
+        let lastInteractionNpcId = null;
 
         const RE_LOGIN             = /Logged in as character (\w+)/;
         const RE_START_INTERACTION = /LocalPlayer: ProcessStartInteraction\((\d+),.*?"([^"]+)"\)/;
         const RE_VENDOR_SCREEN     = /LocalPlayer: ProcessVendorScreen\((\d+), (\w+), (\d+), (\d+), (\d+), "([^"]*)"/;
+        const RE_VENDOR_UPDATE     = /LocalPlayer: ProcessVendorUpdateAvailableGold\((\d+), (\d+), (\d+)\)/; // params: remaining, resetAt, cap
         const RE_TALK_SCREEN       = /LocalPlayer: ProcessTalkScreen\(\d+, "[^"]*", "(<h1>Shops Selling [^"]+)", "/;
 
         // Parse the HTML content string from a ProcessTalkScreen "Shops Selling" line.
@@ -2284,6 +2326,7 @@
                         if (im) {
                             const [, id, internalKey] = im;
                             npcIdToKeyMap[parseInt(id)] = internalKey;
+                            lastInteractionNpcId = parseInt(id);
                             console.log(`[player.log] Mapped NPC#${id} → ${internalKey}`);
                             continue;
                         }
@@ -2315,6 +2358,31 @@
                             vendorLinesFound++;
                             console.log(
                                 `[vendor] NPC#${id} (${internalKey || '?'}) ${favorLevel}` +
+                                ` remaining=${capture.remaining} cap=${capture.cap}` +
+                                ` resetAt=${new Date(capture.resetAt).toLocaleString()}`,
+                                capture
+                            );
+                            storeBrowser.applyVendorCaptures({ [id]: capture });
+                        }
+
+                        // Parse vendor gold update events — params are (remaining, resetAt, cap), no npcId
+                        const vu = RE_VENDOR_UPDATE.exec(line);
+                        if (vu) {
+                            if (lastInteractionNpcId == null) break; // no NPC context yet, skip
+                            const [, remaining, resetAt, cap] = vu;
+                            const id = lastInteractionNpcId;
+                            const internalKey = npcIdToKeyMap[id] || null;
+                            const capture = {
+                                npcId:       id,
+                                npcInternalKey: internalKey,
+                                remaining:   parseInt(remaining),
+                                resetAt:     parseInt(resetAt),
+                                cap:         parseInt(cap),
+                                capturedAt:  Date.now(),
+                            };
+                            vendorLinesFound++;
+                            console.log(
+                                `[vendor] update NPC#${id} (${internalKey || '?'})` +
                                 ` remaining=${capture.remaining} cap=${capture.cap}` +
                                 ` resetAt=${new Date(capture.resetAt).toLocaleString()}`,
                                 capture

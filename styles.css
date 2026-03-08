@@ -366,6 +366,25 @@ header p {
     color: white;
 }
 
+.empty-slots-badge {
+    background: rgba(40, 167, 69, 0.15);
+    color: #28a745;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.85em;
+    font-weight: 600;
+}
+
+.empty-slots-badge.full {
+    background: rgba(220, 53, 69, 0.12);
+    color: #dc3545;
+}
+
+.accordion-header.active .empty-slots-badge {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
 .accordion-icon {
     font-size: 1.2em;
     transition: transform 0.3s;
