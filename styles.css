@@ -1160,6 +1160,66 @@ header p {
     text-overflow: ellipsis;
 }
 
+/* Store tab toolbar */
+.store-toolbar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.store-toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.store-toolbar-label {
+    font-size: 0.75em;
+    font-weight: 700;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.store-toolbar-input {
+    flex: 1 1 200px;
+    padding: 9px 13px;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    font-size: 0.95em;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.store-toolbar-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.store-toolbar-toggle {
+    padding: 9px 16px;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    font-size: 0.9em;
+    font-weight: 600;
+    cursor: pointer;
+    background: white;
+    color: #495057;
+    transition: border-color 0.2s, background 0.2s, color 0.2s;
+    white-space: nowrap;
+}
+
+.store-toolbar-toggle:hover {
+    border-color: #667eea;
+    background: #f0f2ff;
+    color: #667eea;
+}
+
 .tracker-popup {
     display: none;
     position: absolute;

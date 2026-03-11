@@ -117,6 +117,13 @@
         </div>
 
         <div id="stores" class="tab-content stores-browser">
+            <div class="store-toolbar">
+                <input type="text" id="vendorFilter" class="store-toolbar-input" placeholder="🔍 Filter vendors by name..." oninput="if(typeof storeBrowser!=='undefined')storeBrowser.filterVendors()">
+                <div class="store-group-toggle">
+                    <span style="font-size: 0.9em; color: #495057; margin-right: 6px;">Group by:</span>
+                    </div>
+                <button id="storeGroupMode" class="store-toolbar-toggle" onclick="if(typeof storeBrowser!=='undefined')storeBrowser.setGroupMode(this.dataset.mode==='location'?'category':'location')">Location</button>
+            </div>
             <div id="storeList"></div>
         </div>
     </div>
@@ -1190,6 +1197,27 @@
         // Regions to pin to the top of the Stores list (in order), rest sort alphabetically
         const STORE_PINNED_REGIONS = ['Serbule', 'Red Wing Casino', 'Eltibule', 'Serbule Hills'];
 
+        // Custom buy category groupings for "By Buy Category" mode
+        const STORE_BUY_CATEGORIES = [
+            { name: 'Equipment',  types: new Set(['Equipment', 'Armor', 'Weapons']) },
+            { name: 'Jewelry',    types: new Set(['Jewelry']) },
+            { name: 'Junk',       types: new Set(['Mushroom', 'BodyOrgan']) },
+            { name: 'Alchemy',    types: new Set(['Potion', 'Drug', 'MagicOil', 'Alchemy']) },
+            { name: 'Any',        types: new Set(['Any']) },
+            { name: 'Documents',  types: new Set(['Document', 'Recipe', 'Book']) },
+            { name: 'Food',       types: new Set(['Food', 'Drink', 'CookingIngredient', 'Vegetable']) },
+            { name: 'Skin',       types: new Set(['Skin', 'Skinning', 'Fur']) },
+            { name: 'Metal',      types: new Set(['MetalSlab']) },
+            { name: 'Gem',        types: new Set(['Gem']) },
+        ];
+
+        function loadGroupMode() {
+            return localStorage.getItem('gorgon-store-groupmode') || 'location';
+        }
+        function saveGroupMode(mode) {
+            localStorage.setItem('gorgon-store-groupmode', mode);
+        }
+
         // Store Browser
         class StoreBrowser {
             constructor(dataLoader) {
@@ -1198,6 +1226,7 @@
                 this.vendorData = loadVendorData();
                 this.starredVendors = loadStarredVendors();
                 this.resetTicker = null;
+                this.groupMode = loadGroupMode();
 
                 // Canonical favor level ordering (low → high)
                 this.FAVOR_ORDER = [
@@ -1238,6 +1267,9 @@
                     });
                 }
 
+                // Sync toolbar toggle with persisted mode
+                this.syncGroupToggle();
+
                 this.render();
             }
 
@@ -1252,6 +1284,14 @@
                             <p>Load character data to see merchant stores.</p>
                         </div>
                     `;
+                    return;
+                }
+
+                if (this.groupMode === 'category') {
+                    container.innerHTML = this.renderByCategoryView();
+                    this.attachHandlers();
+                    this.startResetTicker();
+                    this.filterVendors();
                     return;
                 }
 
@@ -1279,6 +1319,153 @@
 
                 this.attachHandlers();
                 this.startResetTicker();
+                this.filterVendors();
+            }
+
+            setGroupMode(mode) {
+                this.groupMode = mode;
+                saveGroupMode(mode);
+                this.syncGroupToggle();
+                this.render();
+            }
+
+            syncGroupToggle() {
+                const btn = document.getElementById('storeGroupMode');
+                if (!btn) return;
+                btn.dataset.mode = this.groupMode;
+                btn.textContent = this.groupMode === 'location' ? 'Location' : 'Category';
+            }
+
+            renderFlatVendorRow(entry) {
+                const { key, npc, storeService, favorLevel, area } = entry;
+                const name = npc.Name || key;
+                const parsedCaps = this.parseCaps(storeService).filter(p => p.favorLevel !== 'Despised');
+                const currentCap = favorLevel ? (parsedCaps.find(p => p.favorLevel === favorLevel) || (() => {
+                    const idx = this.FAVOR_ORDER.indexOf(favorLevel);
+                    return idx >= 0 ? [...parsedCaps].reverse().find(p => this.FAVOR_ORDER.indexOf(p.favorLevel) <= idx) : null;
+                })()) : null;
+                const capClass = currentCap ? '' : 'no-cap';
+                const friendsIdx = this.FAVOR_ORDER.indexOf('Friends');
+                const refCap = parsedCaps.find(p => this.FAVOR_ORDER.indexOf(p.favorLevel) >= friendsIdx) || parsedCaps[0];
+                const buysText = refCap ? refCap.buyTypes.join(', ') : '';
+                const favorBadgeHtml = favorLevel
+                    ? `<span class="favor-badge favor-${favorLevel.toLowerCase()}">${favorLevel}</span>`
+                    : `<span class="favor-badge favor-unknown">Not Met</span>`;
+                const tracked = this.vendorData[key] || {};
+                const remaining = tracked.remaining !== undefined ? tracked.remaining : null;
+                const resetAt = tracked.resetAt || null;
+                let capHtml;
+                if (currentCap) {
+                    if (remaining !== null) {
+                        const pct = remaining / currentCap.cap;
+                        const cls = pct > 0.5 ? 'remaining-high' : pct > 0.2 ? 'remaining-med' : 'remaining-low';
+                        capHtml = `<span class="${cls}">${remaining.toLocaleString()}g</span> / ${currentCap.cap.toLocaleString()}g`;
+                    } else {
+                        capHtml = `💰 ${currentCap.cap.toLocaleString()}g`;
+                    }
+                } else {
+                    capHtml = remaining != null ? `<span class="remaining-unknown">${remaining.toLocaleString()}g / Unknown Cap</span>` : '—';
+                }
+                let resetHtml = '', resetColClass = 'col-reset', resetStyle = '';
+                if (resetAt) {
+                    const ms = resetAt - Date.now();
+                    if (ms <= 0) { resetHtml = 'Ready'; resetColClass += ' reset-ready'; }
+                    else resetHtml = this.formatTimeRemaining(ms);
+                    resetStyle = `color:${this.resetColor(ms)}`;
+                }
+                const isStarred = this.starredVendors.has(key);
+                return `
+                    <tr data-npc-key="${key}">
+                        <td class="col-star"><button class="star-btn${isStarred ? ' starred' : ''}" title="${isStarred ? 'Remove from favorites' : 'Add to favorites'}">★</button></td>
+                        <td class="col-name"><a href="https://wiki.projectgorgon.com/wiki/?search=${encodeURIComponent(name)}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none;" onmouseover="this.style.color='#667eea';this.style.textDecoration='underline'" onmouseout="this.style.color='inherit';this.style.textDecoration='none'">${name}</a></td>
+                        <td class="col-region">${area}</td>
+                        <td class="col-favor">${favorBadgeHtml}</td>
+                        <td class="col-cap ${capClass}">${capHtml}</td>
+                        <td class="${resetColClass}" style="${resetStyle}">${resetHtml}</td>
+                        <td class="col-buys">${buysText}</td>
+                        <td class="col-actions">
+                            <div style="display:flex;gap:4px;justify-content:flex-end;align-items:center;">
+                                <div class="tooltip-container">
+                                    <button class="tooltip-btn">?</button>
+                                    <div class="tooltip-content">
+                                        <div class="tooltip-title">All Favor Tiers</div>
+                                        ${this.renderCapTable(parsedCaps, favorLevel)}
+                                        ${npc.Preferences && npc.Preferences.length > 0 ? `
+                                            <div class="tooltip-title tooltip-title-divider">
+                                                <span>Gift Preferences</span>
+                                                <button class="favor-items-btn" data-npc-key="${key}" data-npc-name="${name.replace(/"/g, '&quot;')}">Find Favor Items</button>
+                                            </div>
+                                            ${this.renderPreferencesTable(npc.Preferences)}
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }
+
+            renderFlatVendorTable(entries) {
+                const rows = entries.map(e => this.renderFlatVendorRow(e)).join('');
+                return `
+                    <div class="stores-region-npcs">
+                        <table class="store-table">
+                            <thead>
+                                <tr>
+                                    <th class="col-star-header"></th>
+                                    <th>Merchant</th>
+                                    <th>Region</th>
+                                    <th>Favor</th>
+                                    <th>Cap</th>
+                                    <th>Resets</th>
+                                    <th>Buys</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                `;
+            }
+
+            renderByCategoryView() {
+                const sections = STORE_BUY_CATEGORIES.map(cat => {
+                    const matching = this.storeNPCs.filter(entry => {
+                        const parsedCaps = this.parseCaps(entry.storeService).filter(p => p.favorLevel !== 'Despised');
+                        return parsedCaps.some(cap => cap.buyTypes.some(bt => cat.types.has(bt.trim())));
+                    });
+                    return { cat, matching };
+                }).filter(s => s.matching.length > 0);
+
+                if (sections.length === 0) {
+                    return `<div class="empty-state"><div class="empty-state-icon">🛒</div><h3>No store data loaded</h3></div>`;
+                }
+
+                return sections.map(({ cat, matching }) => {
+                    const accordionId = `store-cat-${cat.name.toLowerCase().replace(/\W+/g, '-')}`;
+                    const sorted = [...matching].sort((a, b) => {
+                        const aS = this.starredVendors.has(a.key);
+                        const bS = this.starredVendors.has(b.key);
+                        if (aS !== bS) return aS ? -1 : 1;
+                        const rc = a.area.localeCompare(b.area);
+                        if (rc !== 0) return rc;
+                        return (a.npc.Name || a.key).localeCompare(b.npc.Name || b.key);
+                    });
+                    return `
+                        <div class="location-accordion">
+                            <div class="accordion-header" data-accordion="${accordionId}">
+                                <div class="accordion-title">
+                                    <span>${cat.name}</span>
+                                    <span class="quest-count-badge">${matching.length} merchant${matching.length !== 1 ? 's' : ''}</span>
+                                </div>
+                                <div class="accordion-icon">▼</div>
+                            </div>
+                            <div id="${accordionId}" class="accordion-content">
+                                ${this.renderFlatVendorTable(sorted)}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
             }
 
             renderFavoritesSection() {
@@ -1292,70 +1479,7 @@
                 });
 
                 const accordionId = 'store-region-favorites';
-                const rows = starred.map(entry => {
-                    const { key, npc, storeService, favorLevel, area } = entry;
-                    const name = npc.Name || key;
-                    const parsedCaps = this.parseCaps(storeService).filter(p => p.favorLevel !== 'Despised');
-                    const currentCap = favorLevel ? parsedCaps.find(p => p.favorLevel === favorLevel) : null;
-                    const capClass = currentCap ? '' : 'no-cap';
-                    const friendsIdx = this.FAVOR_ORDER.indexOf('Friends');
-                    const refCap = parsedCaps.find(p => this.FAVOR_ORDER.indexOf(p.favorLevel) >= friendsIdx) || parsedCaps[0];
-                    const buysText = refCap ? refCap.buyTypes.join(', ') : '';
-                    const favorBadgeHtml = favorLevel
-                        ? `<span class="favor-badge favor-${favorLevel.toLowerCase()}">${favorLevel}</span>`
-                        : `<span class="favor-badge favor-unknown">Not Met</span>`;
-                    const tracked = this.vendorData[key] || {};
-                    const remaining = tracked.remaining !== undefined ? tracked.remaining : null;
-                    const resetAt = tracked.resetAt || null;
-                    let capHtml;
-                    if (currentCap) {
-                        if (remaining !== null) {
-                            const pct = remaining / currentCap.cap;
-                            const cls = pct > 0.5 ? 'remaining-high' : pct > 0.2 ? 'remaining-med' : 'remaining-low';
-                            capHtml = `<span class="${cls}">${remaining.toLocaleString()}g</span> / ${currentCap.cap.toLocaleString()}g`;
-                        } else {
-                            capHtml = `💰 ${currentCap.cap.toLocaleString()}g`;
-                        }
-                    } else {
-                        capHtml = remaining != null ? `<span class="remaining-unknown">${remaining.toLocaleString()}g / Unknown Cap</span>` : '—';
-                    }
-                    let resetHtml = '', resetColClass = 'col-reset', resetStyle = '';
-                    if (resetAt) {
-                        const ms = resetAt - Date.now();
-                        if (ms <= 0) { resetHtml = 'Ready'; resetColClass += ' reset-ready'; }
-                        else resetHtml = this.formatTimeRemaining(ms);
-                        resetStyle = `color:${this.resetColor(ms)}`;
-                    }
-                    return `
-                        <tr data-npc-key="${key}">
-                            <td class="col-star"><button class="star-btn starred" title="Remove from favorites">★</button></td>
-                            <td class="col-name"><a href="https://wiki.projectgorgon.com/wiki/?search=${encodeURIComponent(name)}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none;" onmouseover="this.style.color='#667eea';this.style.textDecoration='underline'" onmouseout="this.style.color='inherit';this.style.textDecoration='none'">${name}</a></td>
-                            <td class="col-region">${area}</td>
-                            <td class="col-favor">${favorBadgeHtml}</td>
-                            <td class="col-cap ${capClass}">${capHtml}</td>
-                            <td class="${resetColClass}" style="${resetStyle}">${resetHtml}</td>
-                            <td class="col-buys">${buysText}</td>
-                            <td class="col-actions">
-                                <div style="display:flex;gap:4px;justify-content:flex-end;align-items:center;">
-                                    <div class="tooltip-container">
-                                        <button class="tooltip-btn">?</button>
-                                        <div class="tooltip-content">
-                                            <div class="tooltip-title">All Favor Tiers</div>
-                                            ${this.renderCapTable(parsedCaps, favorLevel)}
-                                            ${npc.Preferences && npc.Preferences.length > 0 ? `
-                                                <div class="tooltip-title tooltip-title-divider">
-                                                    <span>Gift Preferences</span>
-                                                    <button class="favor-items-btn" data-npc-key="${key}" data-npc-name="${name.replace(/"/g, '&quot;')}">Find Favor Items</button>
-                                                </div>
-                                                ${this.renderPreferencesTable(npc.Preferences)}
-                                            ` : ''}
-                                        </div>
-                                    </div>
-                                </div>
-                            </td>
-                        </tr>
-                    `;
-                }).join('');
+                const rows = starred.map(e => this.renderFlatVendorRow(e)).join('');
 
                 return `
                     <div id="favorites-section" class="location-accordion">
@@ -1367,23 +1491,7 @@
                             <div class="accordion-icon">▼</div>
                         </div>
                         <div id="${accordionId}" class="accordion-content">
-                            <div class="stores-region-npcs">
-                                <table class="store-table">
-                                    <thead>
-                                        <tr>
-                                            <th class="col-star-header"></th>
-                                            <th>Merchant</th>
-                                            <th>Region</th>
-                                            <th>Favor</th>
-                                            <th>Cap</th>
-                                            <th>Resets</th>
-                                            <th>Buys</th>
-                                            <th></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>${rows}</tbody>
-                                </table>
-                            </div>
+                            ${this.renderFlatVendorTable(starred)}
                         </div>
                     </div>
                 `;
@@ -1483,7 +1591,10 @@
                     const parsedCaps = this.parseCaps(entry.storeService).filter(p => p.favorLevel !== 'Despised');
                     // Prefer character file favor level; fall back to captured favor level
                     const effectiveFavorLevel = entry.favorLevel || tracked.favorLevel || null;
-                    const currentCap = effectiveFavorLevel ? parsedCaps.find(p => p.favorLevel === effectiveFavorLevel) : null;
+                    const currentCap = effectiveFavorLevel ? (parsedCaps.find(p => p.favorLevel === effectiveFavorLevel) || (() => {
+                        const idx = this.FAVOR_ORDER.indexOf(effectiveFavorLevel);
+                        return idx >= 0 ? [...parsedCaps].reverse().find(p => this.FAVOR_ORDER.indexOf(p.favorLevel) <= idx) : null;
+                    })()) : null;
 
                     // Update favor badge if capture has a more current favor level than the loaded character file
                     if (tracked.favorLevel && tracked.favorLevel !== entry.favorLevel) {
@@ -1678,7 +1789,10 @@
                 const name = npc.Name || key;
 
                 const parsedCaps = this.parseCaps(storeService).filter(p => p.favorLevel !== 'Despised');
-                const currentCap = favorLevel ? parsedCaps.find(p => p.favorLevel === favorLevel) : null;
+                const currentCap = favorLevel ? (parsedCaps.find(p => p.favorLevel === favorLevel) || (() => {
+                    const idx = this.FAVOR_ORDER.indexOf(favorLevel);
+                    return idx >= 0 ? [...parsedCaps].reverse().find(p => this.FAVOR_ORDER.indexOf(p.favorLevel) <= idx) : null;
+                })()) : null;
                 const capClass = currentCap ? '' : 'no-cap';
 
                 const friendsIdx = this.FAVOR_ORDER.indexOf('Friends');
@@ -2036,6 +2150,23 @@
                     }, { capture: false });
                 }
 
+            }
+
+            filterVendors() {
+                const q = (document.getElementById('vendorFilter')?.value || '').trim().toLowerCase();
+                const container = document.getElementById('storeList');
+                if (!container) return;
+
+                container.querySelectorAll('tr').forEach(row => {
+                    const nameCell = row.querySelector('.col-name');
+                    if (!nameCell) return;
+                    row.style.display = (!q || nameCell.textContent.toLowerCase().includes(q)) ? '' : 'none';
+                });
+
+                container.querySelectorAll('.location-accordion').forEach(accordion => {
+                    const anyVisible = [...accordion.querySelectorAll('tr')].some(r => r.querySelector('.col-name') && r.style.display !== 'none');
+                    accordion.style.display = anyVisible ? '' : 'none';
+                });
             }
         }
 
