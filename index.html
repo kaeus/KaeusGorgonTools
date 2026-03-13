@@ -112,6 +112,7 @@
                 <input type="text" id="priceSearch" class="price-search" placeholder="🔍 Search tracked items...">
                 <button class="btn-price-sort" id="priceSortBtn" title="Toggle sort order">Sort: Name</button>
                 <button class="btn-add-item" id="addItemBtn">+ Add Item</button>
+                <button class="btn-retire-old" id="retireOldBtn" title="Retire all entries older than X days">Retire Old...</button>
             </div>
             <div class="price-log-hint">💡 If you're watching <strong>Player.log</strong>, querying the Search Golem in-game will automatically pop up a <em>Shops Selling</em> card here.</div>
             <div id="priceList"></div>
@@ -2687,6 +2688,22 @@
                 this.render();
             }
 
+            retireOlderThan(days) {
+                const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+                let count = 0;
+                for (const item of Object.values(this.data.items)) {
+                    for (const entry of item.entries) {
+                        if (!entry.retired && entry.timestamp < cutoff) {
+                            entry.retired = true;
+                            count++;
+                        }
+                    }
+                }
+                savePriceTrackerData(this.data);
+                this.render();
+                return count;
+            }
+
             deleteEntry(itemId, entryId) {
                 const item = this.data.items[itemId];
                 item.entries = item.entries.filter(e => e.id !== entryId);
@@ -3324,6 +3341,15 @@
             document.getElementById('addItemName').value = '';
             document.getElementById('addItemModal').style.display = 'flex';
             document.getElementById('addItemName').focus();
+        });
+
+        document.getElementById('retireOldBtn').addEventListener('click', () => {
+            const input = prompt('Retire all active entries older than how many days?', '30');
+            if (input === null) return;
+            const days = parseFloat(input);
+            if (isNaN(days) || days <= 0) { alert('Please enter a positive number of days.'); return; }
+            const count = vendorPriceTracker.retireOlderThan(days);
+            alert(`Retired ${count} entr${count === 1 ? 'y' : 'ies'} older than ${days} day${days === 1 ? '' : 's'}.`);
         });
 
         document.querySelectorAll('.tab').forEach(tab => {
