@@ -22,7 +22,7 @@ body {
     background: white;
     border-radius: 12px;
     box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-    overflow: hidden;
+    overflow: clip;
 }
 
 header {
@@ -221,17 +221,65 @@ header p {
     margin-bottom: 15px;
 }
 
+.quest-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.quest-track-btn {
+    font-size: 1em;
+    color: #adb5bd;
+    background: none;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 2px 7px;
+    cursor: pointer;
+    line-height: 1;
+    transition: all 0.2s;
+}
+
+.quest-track-btn:hover {
+    color: #ffc107;
+    border-color: #ffc107;
+    background: #fff8e1;
+}
+
+.quest-track-btn.tracked {
+    color: #ffc107;
+    border-color: #ffc107;
+    background: #fff8e1;
+}
+
+.quest-track-btn.tracked:hover {
+    color: #dc3545;
+    border-color: #dc3545;
+    background: #fff0f0;
+}
+
+.quest-wiki-btn {
+    font-size: 0.8em;
+    color: #6c757d;
+    text-decoration: none;
+    padding: 3px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    white-space: nowrap;
+    transition: all 0.2s;
+}
+
+.quest-wiki-btn:hover {
+    background: #667eea;
+    color: white;
+    border-color: #667eea;
+}
+
 .quest-title {
     font-size: 1.3em;
     font-weight: 600;
     color: #212529;
     margin-bottom: 5px;
-}
-
-.quest-title a {
-    color: #212529;
-    text-decoration: none;
-    transition: color 0.3s;
 }
 
 .quest-title a:hover {
@@ -281,18 +329,61 @@ header p {
 }
 
 .quest-objectives li {
-    padding: 6px 0;
+    padding: 5px 0;
     color: #6c757d;
-    position: relative;
-    padding-left: 20px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
 }
 
-.quest-objectives li:before {
-    content: "→";
-    position: absolute;
-    left: 0;
+.quest-objectives li.obj-turnin {
+    opacity: 0.55;
+    font-style: italic;
+}
+
+.obj-type-icon,
+.obj-type-arrow {
+    flex-shrink: 0;
+    font-size: 0.9em;
     color: #667eea;
     font-weight: bold;
+    min-width: 18px;
+}
+
+.obj-item-icon {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    flex-shrink: 0;
+    border-radius: 3px;
+    vertical-align: middle;
+}
+
+.obj-text {
+    flex: 1;
+}
+
+.obj-count {
+    background: #667eea;
+    color: white;
+    font-size: 0.78em;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 10px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+@keyframes quest-highlight-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(102, 126, 234, 0.6); border-color: #667eea; }
+    50%  { box-shadow: 0 0 0 8px rgba(102, 126, 234, 0); border-color: #667eea; }
+    100% { box-shadow: 0 0 0 0 rgba(102, 126, 234, 0); }
+}
+
+.quest-card-highlight {
+    animation: quest-highlight-pulse 0.6s ease-out 2;
+    border-color: #667eea !important;
 }
 
 .quest-rewards {
@@ -406,6 +497,58 @@ header p {
     transition: max-height 0.5s ease-in;
 }
 
+/* ── Tracked Quests section ─────────────────────────────── */
+.tracked-quests-section {
+    margin-bottom: 20px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    overflow: clip;
+}
+
+.tracked-quests-header {
+    padding: 15px 20px;
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: white;
+    font-weight: 600;
+    user-select: none;
+    transition: background 0.2s;
+}
+
+.tracked-quests-header:hover {
+    background: linear-gradient(135deg, #218838 0%, #1aab80 100%);
+}
+
+.tracked-quests-header.active {
+    background: linear-gradient(135deg, #1e7e34 0%, #17a673 100%);
+}
+
+.tracked-quests-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.tracked-quests-header .quest-count-badge {
+    background: rgba(255, 255, 255, 0.3);
+    color: white;
+}
+
+.tracked-quests-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out;
+}
+
+.tracked-quests-content.active {
+    max-height: 20000px;
+    transition: max-height 0.6s ease-in;
+}
+
 .quick-objectives-section {
     margin-bottom: 20px;
     background: white;
@@ -514,12 +657,13 @@ header p {
 
 .quick-objective-item {
     display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 8px 12px;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
     background: #f8f9fa;
     border-radius: 6px;
     border-left: 3px solid #ffc107;
+    flex-wrap: wrap;
 }
 
 .quick-objective-text {
@@ -527,24 +671,54 @@ header p {
     color: #212529;
     font-size: 0.9em;
     line-height: 1.5;
+    min-width: 0;
 }
 
-.quick-objective-quest {
-    font-size: 0.8em;
-    color: #6c757d;
+.quick-objective-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.quick-obj-jump-btn {
+    font-size: 0.78em;
+    color: #495057;
+    background: white;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: all 0.2s;
     font-style: italic;
+}
+
+.quick-obj-jump-btn:hover {
+    background: #667eea;
+    color: white;
+    border-color: #667eea;
+}
+
+.quick-obj-wiki-btn {
+    font-size: 0.82em;
+    color: #6c757d;
+    text-decoration: none;
+    padding: 2px 6px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    transition: all 0.2s;
     white-space: nowrap;
 }
 
-.quick-objective-quest a {
-    color: #6c757d;
-    text-decoration: none;
-    transition: color 0.3s;
-}
-
-.quick-objective-quest a:hover {
-    color: #667eea;
-    text-decoration: underline;
+.quick-obj-wiki-btn:hover {
+    background: #6c757d;
+    color: white;
+    border-color: #6c757d;
 }
 
 .accordion-quests {
@@ -571,6 +745,9 @@ header p {
     display: flex;
     border-bottom: 2px solid #e9ecef;
     background: #f8f9fa;
+    position: sticky;
+    top: 0;
+    z-index: 10;
 }
 
 .tab {
@@ -920,6 +1097,11 @@ header p {
 
 .tooltip-container.tooltip-open .tooltip-content {
     display: block;
+}
+
+.tooltip-container.tooltip-flip-up .tooltip-content {
+    top: auto;
+    bottom: calc(100% + 6px);
 }
 
 .tooltip-btn.tooltip-active {
@@ -3151,6 +3333,44 @@ html[data-theme="dark"] .status.loading {
     border-color: #1a4a68;
 }
 
+/* Tracked quests section */
+html[data-theme="dark"] .tracked-quests-section {
+    background: #252540;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+html[data-theme="dark"] .tracked-quests-header {
+    background: linear-gradient(135deg, #1a6b2e 0%, #157a57 100%);
+}
+
+html[data-theme="dark"] .tracked-quests-header:hover {
+    background: linear-gradient(135deg, #1f7d36 0%, #1a8f65 100%);
+}
+
+html[data-theme="dark"] .quest-track-btn {
+    color: #5a5a7a;
+    border-color: #3a3a5a;
+    background: none;
+}
+
+html[data-theme="dark"] .quest-track-btn:hover {
+    color: #ffc107;
+    border-color: #ffc107;
+    background: #2a2510;
+}
+
+html[data-theme="dark"] .quest-track-btn.tracked {
+    color: #ffc107;
+    border-color: #856404;
+    background: #2a2510;
+}
+
+html[data-theme="dark"] .quest-track-btn.tracked:hover {
+    color: #f08090;
+    border-color: #6a1a2e;
+    background: #3d1020;
+}
+
 /* Quest cards */
 html[data-theme="dark"] .quest-card {
     background: #252540;
@@ -3164,6 +3384,10 @@ html[data-theme="dark"] .quest-card:hover {
 
 html[data-theme="dark"] .quest-title {
     color: #e0e0f0;
+}
+
+html[data-theme="dark"] .quest-card-highlight {
+    border-color: #8899ff !important;
 }
 
 html[data-theme="dark"] .quest-title a {
@@ -3194,8 +3418,13 @@ html[data-theme="dark"] .quest-objectives li {
     color: #9090b0;
 }
 
-html[data-theme="dark"] .quest-objectives li:before {
+html[data-theme="dark"] .obj-type-icon,
+html[data-theme="dark"] .obj-type-arrow {
     color: #8899ff;
+}
+
+html[data-theme="dark"] .obj-count {
+    background: #4455cc;
 }
 
 html[data-theme="dark"] .reward-item {
@@ -3269,13 +3498,38 @@ html[data-theme="dark"] .quick-objective-text {
     color: #e0e0f0;
 }
 
-html[data-theme="dark"] .quick-objective-quest,
-html[data-theme="dark"] .quick-objective-quest a {
+html[data-theme="dark"] .quest-wiki-btn {
     color: #8888aa;
+    border-color: #3a3a5a;
 }
 
-html[data-theme="dark"] .quick-objective-quest a:hover {
-    color: #8899ff;
+html[data-theme="dark"] .quest-wiki-btn:hover {
+    background: #667eea;
+    color: white;
+    border-color: #667eea;
+}
+
+html[data-theme="dark"] .quick-obj-jump-btn {
+    background: #2a2a44;
+    color: #c0c0e0;
+    border-color: #3a3a5a;
+}
+
+html[data-theme="dark"] .quick-obj-jump-btn:hover {
+    background: #8899ff;
+    color: #1a1a2a;
+    border-color: #8899ff;
+}
+
+html[data-theme="dark"] .quick-obj-wiki-btn {
+    color: #8888aa;
+    border-color: #3a3a5a;
+}
+
+html[data-theme="dark"] .quick-obj-wiki-btn:hover {
+    background: #4a4a6a;
+    color: #e0e0f0;
+    border-color: #5a5a7a;
 }
 
 /* Item cards */

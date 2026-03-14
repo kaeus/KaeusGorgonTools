@@ -401,11 +401,23 @@
                 this.dataLoader = dataLoader;
                 this.allQuests = [];
                 this.filteredQuests = [];
+                this.itemsByName = {};
+                this.itemsByInternalName = {};
+                this.trackedQuests = new Set(JSON.parse(localStorage.getItem('gorgon-tracked-quests') || '[]'));
+                this._accordionState = {};
             }
 
             async initialize() {
                 if (!this.dataLoader.characterData || !this.dataLoader.questsData) {
                     return;
+                }
+
+                // Build item name/InternalName → CDN item lookups for objective icons and rewards
+                if (this.dataLoader.cdnItemsData) {
+                    for (const item of Object.values(this.dataLoader.cdnItemsData)) {
+                        if (item.Name) this.itemsByName[item.Name] = item;
+                        if (item.InternalName) this.itemsByInternalName[item.InternalName] = item;
+                    }
                 }
 
                 // Build quest list with details
@@ -435,6 +447,20 @@
                 document.getElementById('questSearchBar').style.display = 'block';
             }
 
+            saveTracked() {
+                localStorage.setItem('gorgon-tracked-quests', JSON.stringify([...this.trackedQuests]));
+            }
+
+            toggleTrack(internalName) {
+                if (this.trackedQuests.has(internalName)) {
+                    this.trackedQuests.delete(internalName);
+                } else {
+                    this.trackedQuests.add(internalName);
+                }
+                this.saveTracked();
+                this.render();
+            }
+
             search(query) {
                 const lowerQuery = query.toLowerCase();
                 this.filteredQuests = this.allQuests.filter(quest => {
@@ -462,6 +488,79 @@
                 this.render();
             }
 
+            // Returns { typeIcon, itemIconHtml, countHtml } for an objective's type/itemName/number
+            getObjVisuals(type, itemName, number) {
+                const typeMap = {
+                    kill: '⚔️', killcount: '⚔️',
+                    collect: '📦', item: '📦',
+                    special: '✨', scripted: '📋',
+                    tip: '💡', goto: '🚶', interact: '🤝',
+                    tippedoff: '💡',
+                };
+                const emoji = typeMap[(type || '').toLowerCase()];
+                const typeIcon = emoji
+                    ? `<span class="obj-type-icon" title="${type}">${emoji}</span>`
+                    : `<span class="obj-type-arrow">→</span>`;
+
+                let itemIconHtml = '';
+                if (itemName) {
+                    const cdnItem = this.itemsByName[itemName];
+                    if (cdnItem?.IconId) {
+                        const iconBase = this.dataLoader.cdnBaseUrl.replace('/data/', '/icons/');
+                        itemIconHtml = `<img class="obj-item-icon" src="${iconBase}icon_${cdnItem.IconId}.png" alt="${itemName}" loading="lazy" onerror="this.style.display='none'">`;
+                    }
+                }
+
+                const countHtml = number && number > 1
+                    ? ` <span class="obj-count">×${number}</span>`
+                    : '';
+
+                return { typeIcon, itemIconHtml, countHtml };
+            }
+
+            renderTrackedQuests() {
+                const tracked = this.filteredQuests.filter(q => this.trackedQuests.has(q.internalName));
+                if (tracked.length === 0) return '';
+
+                const grouped = this.groupByLocation(tracked);
+                const locationsHTML = Object.entries(grouped)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([location, quests]) => {
+                        const accordionId = `tracked-accordion-${location.replace(/\s+/g, '-').toLowerCase()}`;
+                        return `
+                            <div class="location-accordion">
+                                <div class="accordion-header" data-accordion="${accordionId}">
+                                    <div class="accordion-title">
+                                        <span>📍 ${location}</span>
+                                        <span class="quest-count-badge">${quests.length} quest${quests.length !== 1 ? 's' : ''}</span>
+                                    </div>
+                                    <div class="accordion-icon">▼</div>
+                                </div>
+                                <div id="${accordionId}" class="accordion-content active">
+                                    <div class="accordion-quests">
+                                        ${quests.map(quest => this.renderQuestCard(quest, 'tracked-quest-card')).join('')}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+
+                return `
+                    <div class="tracked-quests-section">
+                        <div class="tracked-quests-header" id="trackedQuestsToggle">
+                            <div class="tracked-quests-title">
+                                <span>⭐ Tracked Quests</span>
+                                <span class="quest-count-badge">${tracked.length} quest${tracked.length !== 1 ? 's' : ''}</span>
+                            </div>
+                            <div class="accordion-icon">▼</div>
+                        </div>
+                        <div class="tracked-quests-content active" id="trackedQuestsContent">
+                            ${locationsHTML}
+                        </div>
+                    </div>
+                `;
+            }
+
             buildQuickObjectives() {
                 const objectivesByZone = {};
 
@@ -479,7 +578,12 @@
                             if (!(objText).match(/^(Talk to|Return to|Speak with|Speak to)/i)) {
                                 objectivesByZone[zone].push({
                                     text: objText,
-                                    questName: quest.Name
+                                    type: typeof objective === 'object' ? objective.Type : null,
+                                    number: typeof objective === 'object' ? objective.Number : null,
+                                    itemName: typeof objective === 'object' ? objective.ItemName : null,
+                                    questName: quest.Name,
+                                    questId: quest.internalName,
+                                    accordionId: `accordion-${zone.replace(/\s+/g, '-').toLowerCase()}`,
                                 });
                             }
                         }
@@ -497,7 +601,7 @@
                     return '';
                 }
 
-                const zonesHTML = zones.map((zone, index) => {
+                const zonesHTML = zones.map(zone => {
                     const objectives = objectivesByZone[zone];
                     if (objectives.length === 0) return '';
 
@@ -515,11 +619,15 @@
                             <div id="${zoneId}" class="quick-objectives-zone-content">
                                 <ul class="quick-objectives-list">
                                     ${objectives.map(obj => {
-                                        const wikiSearchUrl = `https://wiki.projectgorgon.com/wiki/?search=${encodeURIComponent(obj.questName)}`;
+                                        const { typeIcon, itemIconHtml, countHtml } = this.getObjVisuals(obj.type, obj.itemName, obj.number);
+                                        const wikiUrl = `https://wiki.projectgorgon.com/wiki/?search=${encodeURIComponent(obj.questName)}`;
                                         return `
                                             <li class="quick-objective-item">
-                                                <span class="quick-objective-text">${obj.text}</span>
-                                                <span class="quick-objective-quest"><a href="${wikiSearchUrl}" target="_blank" rel="noopener noreferrer">${obj.questName}</a></span>
+                                                ${typeIcon}${itemIconHtml}<span class="quick-objective-text">${obj.text}${countHtml}</span>
+                                                <span class="quick-objective-actions">
+                                                    <button class="quick-obj-jump-btn" data-quest-id="${obj.questId}" data-accordion-id="${obj.accordionId}" title="Go to quest">${obj.questName}</button>
+                                                    <a class="quick-obj-wiki-btn" href="${wikiUrl}" target="_blank" rel="noopener noreferrer" title="Wiki">🔗</a>
+                                                </span>
                                             </li>
                                         `;
                                     }).join('')}
@@ -545,6 +653,59 @@
                 `;
             }
 
+            // Capture open/close state of every accordion before a re-render
+            _saveAccordionState() {
+                const container = document.getElementById('questList');
+                if (!container) return;
+                // Named sections keyed by content element ID
+                for (const id of ['trackedQuestsContent', 'quickObjectivesContent']) {
+                    const el = document.getElementById(id);
+                    if (el) this._accordionState[id] = el.classList.contains('active');
+                }
+                // Quick-objective zone panels
+                container.querySelectorAll('[data-zone]').forEach(h => {
+                    const el = document.getElementById(h.dataset.zone);
+                    if (el) this._accordionState[h.dataset.zone] = el.classList.contains('active');
+                });
+                // All location accordions (regular + tracked)
+                container.querySelectorAll('[data-accordion]').forEach(h => {
+                    const el = document.getElementById(h.dataset.accordion);
+                    if (el) this._accordionState[h.dataset.accordion] = el.classList.contains('active');
+                });
+            }
+
+            // Restore open/close state after a re-render; falls back to provided default when unseen
+            _applyAccordionState(defaults = {}) {
+                const container = document.getElementById('questList');
+                if (!container) return;
+                const isOpen = (id, def) =>
+                    this._accordionState[id] !== undefined ? this._accordionState[id] : (defaults[id] ?? def);
+
+                // Named sections
+                for (const [contentId, headerId, def] of [
+                    ['trackedQuestsContent',   'trackedQuestsToggle',   true],
+                    ['quickObjectivesContent', 'quickObjectivesToggle', true],
+                ]) {
+                    const open = isOpen(contentId, def);
+                    document.getElementById(contentId)?.classList.toggle('active', open);
+                    document.getElementById(headerId)?.classList.toggle('active', open);
+                }
+                // Zone panels
+                container.querySelectorAll('[data-zone]').forEach(h => {
+                    const open = isOpen(h.dataset.zone, false);
+                    document.getElementById(h.dataset.zone)?.classList.toggle('active', open);
+                    h.classList.toggle('active', open);
+                });
+                // Location accordions
+                container.querySelectorAll('[data-accordion]').forEach(h => {
+                    const id = h.dataset.accordion;
+                    const def = id.startsWith('tracked-accordion-');  // tracked ones open by default
+                    const open = isOpen(id, def);
+                    document.getElementById(id)?.classList.toggle('active', open);
+                    h.classList.toggle('active', open);
+                });
+            }
+
             render() {
                 const container = document.getElementById('questList');
 
@@ -559,19 +720,26 @@
                     return;
                 }
 
+                // Persist accordion states across re-renders
+                this._saveAccordionState();
+
+                // Build tracked quests section
+                const trackedHTML = this.renderTrackedQuests();
+
                 // Build quick objectives section
                 const quickObjectivesHTML = this.renderQuickObjectives();
 
                 // Group quests by DisplayedLocation
                 const groupedQuests = this.groupByLocation(this.filteredQuests);
 
-                // Render quick objectives + accordions for each location
-                container.innerHTML = quickObjectivesHTML + Object.entries(groupedQuests)
+                // Render tracked + quick objectives + accordions for each location
+                container.innerHTML = trackedHTML + quickObjectivesHTML + Object.entries(groupedQuests)
                     .sort(([a], [b]) => a.localeCompare(b))
                     .map(([location, quests]) => this.renderLocationAccordion(location, quests))
                     .join('');
 
-                // Add click handlers for accordions
+                // Restore accordion states, then wire up handlers
+                this._applyAccordionState();
                 this.attachAccordionHandlers();
             }
 
@@ -643,77 +811,155 @@
                         content.classList.toggle('active');
                     });
                 });
+
+                // Handle "jump to quest" buttons — open the accordion and scroll to the card
+                container.querySelectorAll('.quick-obj-jump-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const questId = btn.dataset.questId;
+                        const accordionId = btn.dataset.accordionId;
+
+                        // Expand the location accordion if collapsed
+                        const accordionContent = document.getElementById(accordionId);
+                        if (accordionContent && !accordionContent.classList.contains('active')) {
+                            accordionContent.previousElementSibling?.classList.add('active');
+                            accordionContent.classList.add('active');
+                        }
+
+                        // Scroll to and briefly highlight the quest card
+                        const card = document.getElementById(`quest-card-${questId}`);
+                        if (card) {
+                            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            card.classList.add('quest-card-highlight');
+                            setTimeout(() => card.classList.remove('quest-card-highlight'), 2000);
+                        }
+                    });
+                });
+
+                // Handle tracked quests section toggle
+                const trackedToggle = document.getElementById('trackedQuestsToggle');
+                if (trackedToggle) {
+                    trackedToggle.addEventListener('click', () => {
+                        const content = document.getElementById('trackedQuestsContent');
+                        trackedToggle.classList.toggle('active');
+                        content.classList.toggle('active');
+                    });
+                }
+
+                // Handle track/untrack buttons
+                container.querySelectorAll('.quest-track-btn').forEach(btn => {
+                    btn.addEventListener('click', e => {
+                        e.stopPropagation();
+                        this.toggleTrack(btn.dataset.questId);
+                    });
+                });
             }
 
-            renderQuestCard(quest) {
+            renderQuestCard(quest, idPrefix = 'quest-card') {
                 const objectives = quest.Objectives || [];
                 const rewards = this.formatRewards(quest);
-                const level = quest.Level || quest.MidLevel || '?';
                 const questName = quest.Name || quest.internalName;
                 const wikiSearchUrl = `https://wiki.projectgorgon.com/wiki/?search=${encodeURIComponent(questName)}`;
+                const isTracked = this.trackedQuests.has(quest.internalName);
+
+                // Filter display objectives (skip talk/return turn-ins)
+                const displayObjectives = objectives.filter(obj => {
+                    const text = (typeof obj === 'object' ? obj.Description : obj) || '';
+                    return !text.match(/^(Talk to|Return to|Speak with|Speak to)/i);
+                });
+                const turnInObjectives = objectives.filter(obj => {
+                    const text = (typeof obj === 'object' ? obj.Description : obj) || '';
+                    return text.match(/^(Talk to|Return to|Speak with|Speak to)/i);
+                });
 
                 return `
-                    <div class="quest-card">
+                    <div class="quest-card" id="${idPrefix}-${quest.internalName}">
                         <div class="quest-header">
                             <div>
-                                <div class="quest-title"><a href="${wikiSearchUrl}" target="_blank" rel="noopener noreferrer">${questName}</a></div>
+                                <div class="quest-title">${questName}</div>
                                 ${quest.npcName ? `<div class="quest-npc">📍 ${quest.npcName}</div>` : ''}
                             </div>
-                            ${quest.Reward_Favor ? `<div class="quest-level">${quest.Reward_Favor}fv</div>` : ''}
+                            <div class="quest-header-actions">
+                                <button class="quest-track-btn${isTracked ? ' tracked' : ''}" data-quest-id="${quest.internalName}" title="${isTracked ? 'Untrack quest' : 'Track quest'}">${isTracked ? '★' : '☆'}</button>
+                                <a class="quest-wiki-btn" href="${wikiSearchUrl}" target="_blank" rel="noopener noreferrer" title="Open wiki">🔗 Wiki</a>
+                            </div>
                         </div>
 
                         ${quest.Description ? `<div class="quest-description">${quest.Description}</div>` : ''}
 
-                        ${objectives.length > 0 ? `
+                        ${displayObjectives.length > 0 ? `
                             <div class="quest-objectives">
                                 <h4>Objectives</h4>
                                 <ul>
-                                    ${objectives.map(obj => `
-                                        <li>${this.formatObjective(obj)}</li>
+                                    ${displayObjectives.map(obj => `
+                                        <li>${this.formatObjectiveHtml(obj)}</li>
+                                    `).join('')}
+                                    ${turnInObjectives.map(obj => `
+                                        <li class="obj-turnin">${this.formatObjectiveHtml(obj)}</li>
                                     `).join('')}
                                 </ul>
                             </div>
                         ` : ''}
 
                         ${rewards.length > 0 ? `
-                            <div class="quest-rewards">
-                                ${rewards.map(reward => `<div class="reward-item">${reward}</div>`).join('')}
+                            <div class="quest-objectives">
+                                <h4>Rewards</h4>
+                                <ul>
+                                ${rewards.map(reward => `<li class="reward-item">${reward}</li>`).join('')}
+                                </ul>
                             </div>
                         ` : ''}
                     </div>
                 `;
             }
 
-            formatObjective(objective) {
-                if (typeof objective === 'string') return objective;
-                if (objective.Description) return objective.Description;
-                if (objective.Type) {
-                    let text = objective.Type;
-                    if (objective.Target) text += `: ${objective.Target}`;
-                    if (objective.Number) text += ` (${objective.Number})`;
-                    return text;
+            formatObjectiveHtml(obj) {
+                if (typeof obj === 'string') {
+                    return `<span class="obj-type-arrow">→</span><span class="obj-text">${obj}</span>`;
                 }
-                return JSON.stringify(objective);
+                const text = obj.Description || (obj.Target ? `${obj.Type}: ${obj.Target}` : obj.Type) || JSON.stringify(obj);
+                const { typeIcon, itemIconHtml, countHtml } = this.getObjVisuals(obj.Type, obj.ItemName, obj.Number);
+                return `${typeIcon}${itemIconHtml}<span class="obj-text">${text}</span>${countHtml}`;
             }
 
             formatRewards(quest) {
                 const rewards = [];
+                const iconBase = this.dataLoader.cdnBaseUrl.replace('/data/', '/icons/');
 
-                if (quest.Rewards_Gold) {
-                    rewards.push(`💰 ${quest.Rewards_Gold} Gold`);
+                if (quest.Rewards && Array.isArray(quest.Rewards)) {
+                    for (const r of quest.Rewards) {
+                        if (r.T === 'SkillXp') {
+                            rewards.push(`📈 <strong>${r.Skill}</strong> +${r.Xp?.toLocaleString()} XP`);
+                        } else if (r.T === 'Currency') {
+                            const icon = r.Currency === 'Gold' ? '💰' : '🪙';
+                            rewards.push(`${icon} ${r.Amount?.toLocaleString()} ${r.Currency}`);
+                        }
+                    }
                 }
 
-                if (quest.Rewards_Favor) {
-                    rewards.push(`⭐ ${quest.Rewards_Favor} Favor`);
+                // Flat fields used by the CDN quest data format
+                if (rewards.length === 0) {
+                    if (quest.Rewards_Gold) rewards.push(`💰 ${quest.Rewards_Gold.toLocaleString()} Gold`);
+                    if (quest.Rewards_Favor) rewards.push(`⭐ ${quest.Rewards_Favor} Favor`);
+                    if (quest.Rewards_XP) rewards.push(`📈 ${quest.Rewards_XP.toLocaleString()} XP`);
                 }
 
-                if (quest.Rewards_XP) {
-                    rewards.push(`📈 ${quest.Rewards_XP} XP`);
+                // Render each item reward individually
+                if (quest.Rewards_Items?.length) {
+                    for (const r of quest.Rewards_Items) {
+                        // Rewards_Items entries are InternalName strings; objects fall back to TypeId lookup
+                        const stackSize = typeof r === 'object' ? (r.StackSize || 1) : 1;
+                        let item = this.itemsByInternalName[r.Item] || null;
+                        const name = item?.Name || (typeof r.Item === 'string' ? r.Item : '?');
+                        const iconHtml = item?.IconId
+                            ? `<img class="obj-item-icon" src="${iconBase}icon_${item.IconId}.png" alt="" loading="lazy" onerror="this.style.display='none'">`
+                            : '🎁';
+                        const stack = stackSize > 1 ? ` ×${stackSize}` : '';
+                        rewards.push(`${iconHtml} ${name}${stack}`);
+                    }
                 }
 
-                if (quest.Rewards_Items && quest.Rewards_Items.length > 0) {
-                    rewards.push(`🎁 ${quest.Rewards_Items.length} Item(s)`);
-                }
+                // Favor is always shown separately (it's a relationship reward, not in Rewards array)
+                if (quest.Reward_Favor) rewards.push(`⭐ ${quest.Reward_Favor} Favor`);
 
                 return rewards;
             }
@@ -2125,6 +2371,12 @@
                         const tooltipContainer = btn.closest('.tooltip-container');
                         const isOpen = tooltipContainer.classList.toggle('tooltip-open');
                         btn.classList.toggle('tooltip-active', isOpen);
+                        if (isOpen) {
+                            const content = tooltipContainer.querySelector('.tooltip-content');
+                            tooltipContainer.classList.remove('tooltip-flip-up');
+                            const rect = content.getBoundingClientRect();
+                            tooltipContainer.classList.toggle('tooltip-flip-up', rect.bottom > window.innerHeight);
+                        }
                     });
                 });
 
