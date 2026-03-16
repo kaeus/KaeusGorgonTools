@@ -6,6 +6,419 @@
     <title>Project Gorgon: Chat Watcher</title>
     <link rel="stylesheet" href="styles.css">
     <script src="theme.js"></script>
+    <style>
+        /* Alert cards */
+        .alerts-section {
+            padding: 20px 30px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        .alerts-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .alerts-header h3 {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #495057;
+        }
+        #alertsList.alerts-collapsed {
+            display: none;
+        }
+        .alerts-empty {
+            padding: 15px 0;
+            color: #6c757d;
+            font-size: 0.9em;
+        }
+        .alert-card {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            background: #fdfdff;
+            overflow: hidden;
+        }
+        .alert-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            background: #f0f0fa;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .alert-card-header span {
+            font-weight: 600;
+            font-size: 0.95em;
+            color: #495057;
+        }
+        .alert-card-body {
+            padding: 15px;
+            display: grid;
+            gap: 12px;
+        }
+        .alert-field {
+            display: grid;
+            grid-template-columns: 110px 1fr;
+            gap: 10px;
+            align-items: start;
+        }
+        .alert-field label {
+            font-weight: 600;
+            font-size: 0.9em;
+            color: #495057;
+            padding-top: 8px;
+        }
+        .alert-field input[type="text"],
+        .alert-field input[type="url"],
+        .alert-field select {
+            padding: 7px 10px;
+            border: 2px solid #e9ecef;
+            border-radius: 6px;
+            font-size: 0.9em;
+            width: 100%;
+            transition: border-color 0.2s;
+            background: white;
+            color: #212529;
+        }
+        .alert-field input:focus,
+        .alert-field select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .alert-stats {
+            font-size: 0.85em;
+            color: #6c757d;
+            padding-top: 8px;
+            border-top: 1px solid #eee;
+            display: flex;
+            gap: 20px;
+        }
+        .alert-stats strong {
+            color: #495057;
+        }
+        .sound-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .sound-row select {
+            padding: 7px 10px;
+            border: 2px solid #e9ecef;
+            border-radius: 6px;
+            font-size: 0.9em;
+            background: white;
+            color: #212529;
+        }
+        .sound-data-wrap {
+            flex: 1;
+            min-width: 0;
+        }
+        .sound-data-wrap input[type="url"],
+        .sound-data-wrap input[type="text"] {
+            width: 100%;
+            padding: 7px 10px;
+            border: 2px solid #e9ecef;
+            border-radius: 6px;
+            font-size: 0.9em;
+            background: white;
+            color: #212529;
+        }
+        .sound-data-wrap input[type="file"] {
+            padding: 5px;
+            border: 2px dashed #dee2e6;
+            border-radius: 6px;
+            font-size: 0.85em;
+        }
+        .sound-saved-note {
+            font-size: 0.8em;
+            color: #28a745;
+            margin-bottom: 4px;
+        }
+        .tts-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .tts-toggle-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            color: #495057;
+        }
+        .tts-fields {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .tts-fields input[type="text"] {
+            flex: 1;
+            min-width: 160px;
+            padding: 7px 10px;
+            border: 2px solid #e9ecef;
+            border-radius: 6px;
+            font-size: 0.9em;
+            background: white;
+            color: #212529;
+        }
+        .tts-fields select {
+            padding: 7px 10px;
+            border: 2px solid #e9ecef;
+            border-radius: 6px;
+            font-size: 0.9em;
+            min-width: 150px;
+            background: white;
+            color: #212529;
+        }
+        /* Chat section */
+        .chat-section {
+            padding: 0 30px 30px;
+        }
+        .chat-toolbar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            padding: 15px 0 10px;
+        }
+        .chat-toolbar input[type="text"] {
+            flex: 1;
+            padding: 8px 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 6px;
+            font-size: 0.9em;
+            transition: border-color 0.2s;
+            background: white;
+            color: #212529;
+        }
+        .chat-toolbar input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .chat-toolbar select {
+            padding: 8px 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 6px;
+            font-size: 0.9em;
+            background: white;
+            color: #212529;
+        }
+        .chat-display {
+            height: 500px !important;
+        }
+        .chat-footer {
+            font-size: 0.85em;
+            color: #6c757d;
+            padding-top: 8px;
+        }
+        /* Resume banner */
+        .resume-banner {
+            margin: 12px 30px;
+            padding: 12px 20px;
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .resume-banner span {
+            flex: 1;
+            font-size: 0.95em;
+            color: #856404;
+        }
+        /* Dark mode */
+        html[data-theme="dark"] .alerts-section {
+            border-bottom-color: #3a3a5a;
+        }
+        html[data-theme="dark"] .alerts-header h3 {
+            color: #c0c0e0;
+        }
+        html[data-theme="dark"] .alerts-empty {
+            color: #8888aa;
+        }
+        html[data-theme="dark"] .alert-card {
+            background: #1e1e2e;
+            border-color: #3a3a5a;
+        }
+        html[data-theme="dark"] .alert-card-header {
+            background: #252540;
+            border-bottom-color: #3a3a5a;
+        }
+        html[data-theme="dark"] .alert-card-header span {
+            color: #c0c0e0;
+        }
+        html[data-theme="dark"] .alert-field label {
+            color: #c0c0e0;
+        }
+        html[data-theme="dark"] .alert-field input,
+        html[data-theme="dark"] .alert-field select,
+        html[data-theme="dark"] .sound-row select,
+        html[data-theme="dark"] .sound-data-wrap input,
+        html[data-theme="dark"] .tts-fields input,
+        html[data-theme="dark"] .tts-fields select {
+            background: #2a2a44;
+            border-color: #3a3a5a;
+            color: #c0c0e0;
+        }
+        html[data-theme="dark"] .alert-stats {
+            border-top-color: #3a3a5a;
+            color: #8888aa;
+        }
+        html[data-theme="dark"] .alert-stats strong {
+            color: #c0c0e0;
+        }
+        html[data-theme="dark"] .tts-toggle-label {
+            color: #c0c0e0;
+        }
+        html[data-theme="dark"] .chat-toolbar input,
+        html[data-theme="dark"] .chat-toolbar select {
+            background: #2a2a44;
+            border-color: #3a3a5a;
+            color: #c0c0e0;
+        }
+        html[data-theme="dark"] .chat-footer {
+            color: #8888aa;
+        }
+        html[data-theme="dark"] .resume-banner {
+            background: #3a2d00;
+            border-color: #ffc107;
+        }
+        html[data-theme="dark"] .resume-banner span {
+            color: #ffd966;
+        }
+        html[data-theme="dark"] .sound-data-wrap input[type="file"] {
+            border-color: #3a3a5a;
+            color: #c0c0e0;
+        }
+        /* Config section collapsible */
+        .config-header {
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            font-size: 0.95em;
+            color: #495057;
+            margin-bottom: 15px;
+        }
+        .config-header:hover {
+            color: #667eea;
+        }
+        #configBody.config-collapsed {
+            display: none;
+        }
+        html[data-theme="dark"] .config-header {
+            color: #c0c0e0;
+        }
+        html[data-theme="dark"] .config-header:hover {
+            color: #8899ff;
+        }
+        /* Enable/disable toggle */
+        .alert-enable-btn {
+            padding: 3px 10px;
+            border-radius: 12px;
+            border: 2px solid;
+            font-size: 0.8em;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .alert-enable-btn.enabled {
+            background: #d4edda;
+            border-color: #28a745;
+            color: #155724;
+        }
+        .alert-enable-btn.disabled {
+            background: #f8f9fa;
+            border-color: #adb5bd;
+            color: #6c757d;
+        }
+        .alert-card.alert-disabled .alert-card-header {
+            opacity: 0.6;
+        }
+        .alert-card.alert-disabled .alert-card-body {
+            opacity: 0.45;
+        }
+        html[data-theme="dark"] .alert-enable-btn.enabled {
+            background: #1a3a26;
+            border-color: #28a745;
+            color: #6fcf8e;
+        }
+        html[data-theme="dark"] .alert-enable-btn.disabled {
+            background: #252540;
+            border-color: #4a4a6a;
+            color: #6666aa;
+        }
+        /* Collapsible alert cards */
+        .alert-card-header {
+            cursor: default;
+        }
+        .collapse-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 0.85em;
+            color: #667eea;
+            padding: 0 2px;
+            line-height: 1;
+            flex-shrink: 0;
+            transition: transform 0.15s;
+        }
+        .collapse-btn:hover {
+            color: #4a5ac8;
+        }
+        .alert-header-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            min-width: 0;
+        }
+        .alert-header-title {
+            font-weight: 600;
+            font-size: 0.95em;
+            color: #495057;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .alert-header-summary {
+            font-size: 0.85em;
+            color: #6c757d;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+        }
+        .alert-header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+        .alert-header-stats {
+            font-size: 0.8em;
+            color: #6c757d;
+            white-space: nowrap;
+        }
+        .alert-card.collapsed .alert-card-body {
+            display: none;
+        }
+        html[data-theme="dark"] .collapse-btn {
+            color: #8899ff;
+        }
+        html[data-theme="dark"] .alert-header-title {
+            color: #c0c0e0;
+        }
+        html[data-theme="dark"] .alert-header-summary,
+        html[data-theme="dark"] .alert-header-stats {
+            color: #8888aa;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -23,46 +436,29 @@
         </div>
 
         <div class="controls">
-            <div class="control-row">
-                <label for="searchPattern">Search Pattern:</label>
-                <div>
-                    <input type="text" id="searchPattern" placeholder="e.g. [NPC Chatter] Ursula">
-                    <div class="help-text">Pattern to watch for in chat logs (case-sensitive)</div>
+            <div class="config-header" onclick="chatWatcher.toggleConfigSection()">
+                <span id="configChevron">▼</span> ⚙️ Config
+            </div>
+            <div id="configBody">
+                <div class="control-row">
+                    <label>ChatLogs Folder:</label>
+                    <div>
+                        <button class="btn-secondary" id="selectChatFolderBtn" onclick="chatWatcher.selectChatLogsFolder()">📂 Select ChatLogs Folder</button>
+                        <div class="help-text">Folder: <code>%LocalAppDataLow%\Elder Game\Project Gorgon\ChatLogs</code></div>
+                    </div>
                 </div>
-            </div>
-
-            <div class="control-row">
-                <label for="soundUrl">Alert Sound (URL):</label>
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <input type="url" id="soundUrl" placeholder="https://example.com/alert.mp3" style="flex: 1;">
-                    <button class="test-sound-btn" onclick="chatWatcher.testSound()">🔊 Test</button>
+                <div class="control-row">
+                    <label for="pollInterval">Poll Interval (s):</label>
+                    <div>
+                        <input type="number" id="pollInterval" min="1" max="30" value="2" step="1" style="width:80px;" oninput="chatWatcher._savePollInterval()">
+                    </div>
                 </div>
-            </div>
-
-            <div class="control-row">
-                <label for="soundFile">Or Upload File:</label>
-                <input type="file" id="soundFile" accept="audio/*">
-            </div>
-
-            <div class="control-row">
-                <label for="pollInterval">Poll Interval (seconds):</label>
-                <input type="number" id="pollInterval" min="1" max="30" value="2" step="1">
-            </div>
-
-            <div class="control-row">
-                <label>ChatLogs Folder:</label>
-                <div>
-                    <button class="btn-secondary" id="selectChatFolderBtn" onclick="chatWatcher.selectChatLogsFolder()">📂 Select ChatLogs Folder</button>
-                    <div class="help-text">Folder: <code>%LocalAppData%Low\Elder Game\Project Gorgon\ChatLogs</code></div>
-                </div>
-            </div>
-
-            <div class="control-row">
-                <label></label>
-                <div class="button-group">
-                    <button class="btn-primary" id="startBtn" onclick="chatWatcher.start()">▶️ Start Watching</button>
-                    <button class="btn-danger" id="stopBtn" onclick="chatWatcher.stop()" disabled>⏹️ Stop</button>
-                    <button class="btn-secondary" onclick="chatWatcher.clearDisplay()">🗑️ Clear Display</button>
+                <div class="control-row">
+                    <label></label>
+                    <div class="button-group">
+                        <button class="btn-primary" id="toggleWatchBtn" onclick="chatWatcher.toggleWatch()">▶️ Start Watching</button>
+                        <button class="btn-secondary" onclick="chatWatcher.clearDisplay()">🗑️ Clear</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -75,29 +471,37 @@
             <div id="fileInfo">No file loaded</div>
         </div>
 
-        <div style="padding: 30px; padding-bottom: 0;">
-            <div class="stats">
-                <div class="stat-card">
-                    <div class="stat-label">Total Lines</div>
-                    <div class="stat-value" id="totalLines">0</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Matches Found</div>
-                    <div class="stat-value" id="matchCount">0</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Last Match</div>
-                    <div class="stat-value" id="lastMatch" style="font-size: 1em;">None</div>
-                </div>
-            </div>
+        <div id="resumeBanner" style="display:none;" class="resume-banner">
+            <span>📁 ChatLogs folder was saved from a previous session. Click to resume watching.</span>
+            <button class="btn-primary" onclick="chatWatcher.resumeWatching()">▶️ Resume Watching</button>
         </div>
 
-        <div class="chat-display" id="chatDisplay">
-            <div class="empty-state">
-                <div class="empty-state-icon">💬</div>
-                <h3>Chat watcher is stopped</h3>
-                <p>Configure your settings and click "Start Watching" to begin monitoring chat logs.</p>
+        <div class="alerts-section">
+            <div class="alerts-header">
+                <h3 onclick="chatWatcher.toggleAlertsSection()" style="cursor:pointer;user-select:none;">
+                    <span id="alertsSectionChevron">▼</span> 🔔 Alerts
+                </h3>
+                <button class="btn-primary" onclick="chatWatcher.addAlert()">+ Add Alert</button>
             </div>
+            <div id="alertsList"></div>
+        </div>
+
+        <div class="chat-section">
+            <div class="chat-toolbar">
+                <input type="text" id="chatSearch" placeholder="🔍 Search chat..." oninput="chatWatcher._applyFilters()">
+                <select id="channelFilter" onchange="chatWatcher._applyFilters()">
+                    <option value="">All Channels</option>
+                </select>
+                <button class="btn-secondary" onclick="chatWatcher.clearDisplay()">Clear</button>
+            </div>
+            <div class="chat-display" id="chatDisplay">
+                <div class="empty-state">
+                    <div class="empty-state-icon">💬</div>
+                    <h3>Chat watcher is stopped</h3>
+                    <p>Select a ChatLogs folder and click "Start Watching" to begin monitoring.</p>
+                </div>
+            </div>
+            <div class="chat-footer" id="chatFooter">Total Lines: 0</div>
         </div>
     </div>
 
@@ -108,14 +512,20 @@
                 this.offset = 0;
                 this.pollInterval = 2000;
                 this.pollTimer = null;
-                this.audio = new Audio();
-                this.soundUrl = '';
                 this.totalLines = 0;
-                this.matchCount = 0;
-                this.maxDisplayLines = 200;
+                this.maxLines = 2000;
                 this.chatLogsDirHandle = null;
                 this.chatFileHandle = null;
+                this.chatFileName = null;
+                this.alerts = [];
+                this.voices = [];
+                this.knownChannels = new Set();
+                this._pendingHandle = null;
             }
+
+            // =========================================================
+            // IndexedDB
+            // =========================================================
 
             async openHandlesDB() {
                 return new Promise((resolve, reject) => {
@@ -146,6 +556,497 @@
                 } catch (e) { return null; }
             }
 
+            // =========================================================
+            // Persistence
+            // =========================================================
+
+            _saveAlerts() {
+                const toSave = this.alerts.map(a => ({
+                    id: a.id,
+                    enabled: a.enabled,
+                    pattern: a.pattern,
+                    channelFilter: a.channelFilter,
+                    soundType: a.soundType,
+                    soundData: a.soundData,
+                    ttsEnabled: a.ttsEnabled,
+                    ttsText: a.ttsText,
+                    ttsVoice: a.ttsVoice
+                }));
+                try {
+                    localStorage.setItem('gorgon-chatwatcher-alerts', JSON.stringify(toSave));
+                } catch (e) {
+                    if (e.name === 'QuotaExceededError') {
+                        window.alert('Storage quota exceeded — the audio file may be too large to persist. Try using a URL instead.');
+                    }
+                }
+            }
+
+            _loadAlerts() {
+                try {
+                    const raw = localStorage.getItem('gorgon-chatwatcher-alerts');
+                    if (!raw) return;
+                    const parsed = JSON.parse(raw);
+                    this.alerts = parsed.map(a => ({
+                        id: a.id || Date.now().toString() + Math.random(),
+                        pattern: a.pattern || '',
+                        channelFilter: a.channelFilter || '',
+                        soundType: a.soundType || 'none',
+                        soundData: a.soundData || '',
+                        enabled: a.enabled !== false,
+                        ttsEnabled: !!a.ttsEnabled,
+                        ttsText: a.ttsText || '',
+                        ttsVoice: a.ttsVoice || '',
+                        matchCount: 0,
+                        lastMatch: '',
+                        collapsed: false,
+                        audio: null
+                    }));
+                } catch (e) { /* corrupt data */ }
+            }
+
+            _savePollInterval() {
+                const val = parseInt(document.getElementById('pollInterval').value) || 2;
+                localStorage.setItem('gorgon-chatwatcher-poll-interval', val);
+                this.pollInterval = val * 1000;
+            }
+
+            _loadPollInterval() {
+                const saved = localStorage.getItem('gorgon-chatwatcher-poll-interval');
+                if (saved) {
+                    const val = parseInt(saved);
+                    if (val >= 1 && val <= 30) {
+                        document.getElementById('pollInterval').value = val;
+                        this.pollInterval = val * 1000;
+                    }
+                }
+            }
+
+            // =========================================================
+            // TTS
+            // =========================================================
+
+            _loadVoices() {
+                const assign = () => {
+                    this.voices = speechSynthesis.getVoices();
+                    if (this.voices.length > 0) this._refreshAllVoiceDropdowns();
+                };
+                assign();
+                if ('onvoiceschanged' in speechSynthesis) {
+                    speechSynthesis.onvoiceschanged = assign;
+                }
+            }
+
+            _refreshAllVoiceDropdowns() {
+                document.querySelectorAll('.voice-select').forEach(sel => {
+                    const current = sel.value;
+                    sel.innerHTML = '<option value="">Default voice</option>' +
+                        this.voices.map(v =>
+                            `<option value="${this._esc(v.name)}"${v.name === current ? ' selected' : ''}>${this._esc(v.name)}</option>`
+                        ).join('');
+                    // Restore previous selection
+                    if (current) sel.value = current;
+                });
+            }
+
+            _buildVoiceOptions(selectedName) {
+                return '<option value="">Default voice</option>' +
+                    this.voices.map(v =>
+                        `<option value="${this._esc(v.name)}"${v.name === selectedName ? ' selected' : ''}>${this._esc(v.name)}</option>`
+                    ).join('');
+            }
+
+            _speakTTS(alert, line) {
+                if (!alert.ttsEnabled || !alert.ttsText) return;
+                const text = alert.ttsText.replace('{line}', line);
+                const utt = new SpeechSynthesisUtterance(text);
+                if (alert.ttsVoice) {
+                    const v = this.voices.find(v => v.name === alert.ttsVoice);
+                    if (v) utt.voice = v;
+                }
+                // Interrupt mode: cancel pending, always speak latest
+                speechSynthesis.cancel();
+                speechSynthesis.speak(utt);
+            }
+
+            _esc(str) {
+                return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            }
+
+            // =========================================================
+            // Alert CRUD
+            // =========================================================
+
+            addAlert() {
+                const id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                    ? crypto.randomUUID()
+                    : Date.now().toString() + Math.random().toString(36).slice(2);
+                this.alerts.push({
+                    id,
+                    enabled: true,
+                    pattern: '',
+                    channelFilter: '',
+                    soundType: 'none',
+                    soundData: '',
+                    ttsEnabled: false,
+                    ttsText: '',
+                    ttsVoice: '',
+                    matchCount: 0,
+                    lastMatch: '',
+                    collapsed: false,
+                    audio: null
+                });
+                this.renderAlerts();
+                this._saveAlerts();
+            }
+
+            deleteAlert(id) {
+                this.alerts = this.alerts.filter(a => a.id !== id);
+                this.renderAlerts();
+                this._saveAlerts();
+            }
+
+            updateAlert(id, field, value) {
+                const al = this.alerts.find(a => a.id === id);
+                if (!al) return;
+                al[field] = value;
+                if (field === 'soundData' || field === 'soundType') {
+                    al.audio = null; // force re-create on next play
+                }
+                if (field === 'soundType') {
+                    // Re-render just the sound data input area
+                    const card = document.querySelector(`.alert-card[data-id="${id}"]`);
+                    if (card) {
+                        const wrap = card.querySelector('.sound-data-wrap');
+                        if (wrap) wrap.replaceWith(this._buildSoundDataWrap(al));
+                    }
+                }
+                this._saveAlerts();
+            }
+
+            updateAlertTts(id, enabled) {
+                const al = this.alerts.find(a => a.id === id);
+                if (!al) return;
+                al.ttsEnabled = enabled;
+                const card = document.querySelector(`.alert-card[data-id="${id}"]`);
+                if (card) {
+                    const ttsFields = card.querySelector('.tts-fields');
+                    if (ttsFields) ttsFields.style.display = enabled ? 'flex' : 'none';
+                }
+                this._saveAlerts();
+            }
+
+            _refreshAlertStats(id) {
+                const al = this.alerts.find(a => a.id === id);
+                if (!al) return;
+                const statsEl = document.querySelector(`.alert-card[data-id="${id}"] .alert-stats`);
+                if (statsEl) {
+                    statsEl.innerHTML =
+                        `<span>Matches: <strong>${al.matchCount.toLocaleString()}</strong></span>` +
+                        `<span>Last: <strong>${al.lastMatch || 'Never'}</strong></span>`;
+                }
+                const hdrStats = document.querySelector(`.alert-card[data-id="${id}"] .alert-header-stats`);
+                if (hdrStats) {
+                    hdrStats.textContent = `✓ ${al.matchCount.toLocaleString()} | ${al.lastMatch || 'Never'}`;
+                }
+            }
+
+            _buildAlertSummary(al) {
+                const parts = [];
+                if (al.channelFilter) parts.push(`[${al.channelFilter}]`);
+                if (al.pattern) parts.push(`"${al.pattern}"`);
+                return parts.length ? parts.join(' ') : 'Unconfigured';
+            }
+
+            toggleConfigSection() {
+                const body = document.getElementById('configBody');
+                const chevron = document.getElementById('configChevron');
+                const collapsed = body.classList.toggle('config-collapsed');
+                chevron.textContent = collapsed ? '▶' : '▼';
+            }
+
+            _setConfigCollapsed(collapsed) {
+                const body = document.getElementById('configBody');
+                const chevron = document.getElementById('configChevron');
+                body.classList.toggle('config-collapsed', collapsed);
+                chevron.textContent = collapsed ? '▶' : '▼';
+            }
+
+            toggleAlertsSection() {
+                const list = document.getElementById('alertsList');
+                const chevron = document.getElementById('alertsSectionChevron');
+                const collapsed = list.classList.toggle('alerts-collapsed');
+                chevron.textContent = collapsed ? '▶' : '▼';
+                localStorage.setItem('gorgon-chatwatcher-section-collapsed', collapsed ? '1' : '');
+            }
+
+            toggleAlertCollapse(id) {
+                const al = this.alerts.find(a => a.id === id);
+                if (!al) return;
+                al.collapsed = !al.collapsed;
+                const card = document.querySelector(`.alert-card[data-id="${id}"]`);
+                if (!card) return;
+                card.classList.toggle('collapsed', al.collapsed);
+                const btn = card.querySelector('.collapse-btn');
+                if (btn) btn.textContent = al.collapsed ? '▶' : '▼';
+            }
+
+            // =========================================================
+            // Alert rendering
+            // =========================================================
+
+            renderAlerts() {
+                const list = document.getElementById('alertsList');
+                if (this.alerts.length === 0) {
+                    list.innerHTML = '<div class="alerts-empty">No alerts configured. Add an alert to get notified when patterns appear in chat.</div>';
+                    return;
+                }
+                list.innerHTML = '';
+                this.alerts.forEach((alert, idx) => list.appendChild(this._buildAlertCard(alert, idx + 1)));
+                this._refreshAllVoiceDropdowns();
+            }
+
+            _buildSoundDataWrap(al) {
+                const wrap = document.createElement('div');
+                wrap.className = 'sound-data-wrap';
+
+                if (al.soundType === 'url') {
+                    const inp = document.createElement('input');
+                    inp.type = 'url';
+                    inp.placeholder = 'https://example.com/alert.mp3';
+                    inp.value = al.soundData || '';
+                    inp.oninput = () => this.updateAlert(al.id, 'soundData', inp.value);
+                    wrap.appendChild(inp);
+                } else if (al.soundType === 'dataurl') {
+                    if (al.soundData) {
+                        const note = document.createElement('div');
+                        note.className = 'sound-saved-note';
+                        note.textContent = '✓ Audio file saved. Upload new file to replace.';
+                        wrap.appendChild(note);
+                    }
+                    const fileInp = document.createElement('input');
+                    fileInp.type = 'file';
+                    fileInp.accept = 'audio/*';
+                    fileInp.onchange = (e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            al.soundData = reader.result;
+                            al.audio = null;
+                            this._saveAlerts();
+                            wrap.replaceWith(this._buildSoundDataWrap(al));
+                        };
+                        reader.readAsDataURL(file);
+                    };
+                    wrap.appendChild(fileInp);
+                }
+                return wrap;
+            }
+
+            _buildAlertCard(al, num) {
+                const card = document.createElement('div');
+                card.className = 'alert-card';
+                card.dataset.id = al.id;
+                if (al.collapsed) card.classList.add('collapsed');
+
+                // --- Header ---
+                const hdr = document.createElement('div');
+                hdr.className = 'alert-card-header';
+
+                // Left: collapse toggle + title + summary
+                const collapseBtn = document.createElement('button');
+                collapseBtn.className = 'collapse-btn';
+                collapseBtn.textContent = al.collapsed ? '▶' : '▼';
+                collapseBtn.title = 'Collapse / Expand';
+                collapseBtn.onclick = () => this.toggleAlertCollapse(al.id);
+
+                const hdrTitle = document.createElement('span');
+                hdrTitle.className = 'alert-header-title';
+                hdrTitle.textContent = `Alert #${num}`;
+
+                const hdrSummary = document.createElement('span');
+                hdrSummary.className = 'alert-header-summary';
+                hdrSummary.textContent = this._buildAlertSummary(al);
+
+                const hdrLeft = document.createElement('div');
+                hdrLeft.className = 'alert-header-left';
+                hdrLeft.appendChild(collapseBtn);
+                hdrLeft.appendChild(hdrTitle);
+                hdrLeft.appendChild(hdrSummary);
+
+                // Right: compact stats + enable toggle + delete
+                const hdrStats = document.createElement('span');
+                hdrStats.className = 'alert-header-stats';
+                hdrStats.textContent = `✓ ${al.matchCount.toLocaleString()} | ${al.lastMatch || 'Never'}`;
+
+                const enableToggle = document.createElement('button');
+                enableToggle.className = al.enabled ? 'alert-enable-btn enabled' : 'alert-enable-btn disabled';
+                enableToggle.textContent = al.enabled ? '● On' : '○ Off';
+                enableToggle.title = 'Enable / Disable alert';
+                enableToggle.onclick = () => {
+                    al.enabled = !al.enabled;
+                    enableToggle.className = al.enabled ? 'alert-enable-btn enabled' : 'alert-enable-btn disabled';
+                    enableToggle.textContent = al.enabled ? '● On' : '○ Off';
+                    card.classList.toggle('alert-disabled', !al.enabled);
+                    this._saveAlerts();
+                };
+
+                const delBtn = document.createElement('button');
+                delBtn.className = 'btn-danger';
+                delBtn.style.cssText = 'padding:4px 10px;font-size:0.85em;';
+                delBtn.textContent = '✕ Delete';
+                delBtn.onclick = () => this.deleteAlert(al.id);
+
+                const hdrRight = document.createElement('div');
+                hdrRight.className = 'alert-header-right';
+                hdrRight.appendChild(hdrStats);
+                hdrRight.appendChild(enableToggle);
+                hdrRight.appendChild(delBtn);
+
+                if (!al.enabled) card.classList.add('alert-disabled');
+
+                hdr.appendChild(hdrLeft);
+                hdr.appendChild(hdrRight);
+                card.appendChild(hdr);
+
+                // --- Body ---
+                const body = document.createElement('div');
+                body.className = 'alert-card-body';
+
+                // Channel filter
+                const chRow = document.createElement('div');
+                chRow.className = 'alert-field';
+                const chLabel = document.createElement('label');
+                chLabel.textContent = 'Channel:';
+                const chInp = document.createElement('input');
+                chInp.type = 'text';
+                chInp.placeholder = 'Any channel (e.g. Tell, NPC Chatter)';
+                chInp.value = al.channelFilter || '';
+                chInp.oninput = () => {
+                    this.updateAlert(al.id, 'channelFilter', chInp.value);
+                    const summary = card.querySelector('.alert-header-summary');
+                    if (summary) summary.textContent = this._buildAlertSummary(al);
+                };
+                chRow.appendChild(chLabel);
+                chRow.appendChild(chInp);
+                body.appendChild(chRow);
+
+                // Pattern
+                const patRow = document.createElement('div');
+                patRow.className = 'alert-field';
+                const patLabel = document.createElement('label');
+                patLabel.textContent = 'Pattern:';
+                const patInp = document.createElement('input');
+                patInp.type = 'text';
+                patInp.placeholder = 'e.g. your name or keyword (case-insensitive)';
+                patInp.value = al.pattern;
+                patInp.oninput = () => {
+                    this.updateAlert(al.id, 'pattern', patInp.value);
+                    const summary = card.querySelector('.alert-header-summary');
+                    if (summary) summary.textContent = this._buildAlertSummary(al);
+                };
+                patRow.appendChild(patLabel);
+                patRow.appendChild(patInp);
+                body.appendChild(patRow);
+
+                // Sound
+                const sndRow = document.createElement('div');
+                sndRow.className = 'alert-field';
+                const sndLabel = document.createElement('label');
+                sndLabel.textContent = 'Sound:';
+                const sndControls = document.createElement('div');
+                sndControls.className = 'sound-row';
+                const sndTypeSel = document.createElement('select');
+                sndTypeSel.innerHTML = '<option value="none">None</option><option value="url">URL</option><option value="dataurl">Upload File</option>';
+                sndTypeSel.value = al.soundType;
+                sndTypeSel.onchange = () => this.updateAlert(al.id, 'soundType', sndTypeSel.value);
+                sndControls.appendChild(sndTypeSel);
+                sndControls.appendChild(this._buildSoundDataWrap(al));
+                const testBtn = document.createElement('button');
+                testBtn.className = 'test-sound-btn';
+                testBtn.textContent = '🔊 Test';
+                testBtn.onclick = () => this.testAlertSound(al.id);
+                sndControls.appendChild(testBtn);
+                sndRow.appendChild(sndLabel);
+                sndRow.appendChild(sndControls);
+                body.appendChild(sndRow);
+
+                // TTS
+                const ttsRow = document.createElement('div');
+                ttsRow.className = 'alert-field';
+                const ttsLabel = document.createElement('label');
+                ttsLabel.textContent = 'TTS:';
+                const ttsWrap = document.createElement('div');
+                ttsWrap.className = 'tts-wrap';
+
+                const ttsToggleLabel = document.createElement('label');
+                ttsToggleLabel.className = 'tts-toggle-label';
+                const ttsCheck = document.createElement('input');
+                ttsCheck.type = 'checkbox';
+                ttsCheck.checked = al.ttsEnabled;
+                ttsCheck.onchange = () => this.updateAlertTts(al.id, ttsCheck.checked);
+                ttsToggleLabel.appendChild(ttsCheck);
+                ttsToggleLabel.appendChild(document.createTextNode(' Enable Text-to-Speech'));
+                ttsWrap.appendChild(ttsToggleLabel);
+
+                const ttsFields = document.createElement('div');
+                ttsFields.className = 'tts-fields';
+                ttsFields.style.display = al.ttsEnabled ? 'flex' : 'none';
+
+                const ttsTxtInp = document.createElement('input');
+                ttsTxtInp.type = 'text';
+                ttsTxtInp.placeholder = 'Text to speak — use {line} for matched line';
+                ttsTxtInp.value = al.ttsText;
+                ttsTxtInp.oninput = () => this.updateAlert(al.id, 'ttsText', ttsTxtInp.value);
+
+                const ttsVoiceSel = document.createElement('select');
+                ttsVoiceSel.className = 'voice-select';
+                ttsVoiceSel.innerHTML = this._buildVoiceOptions(al.ttsVoice);
+                ttsVoiceSel.onchange = () => this.updateAlert(al.id, 'ttsVoice', ttsVoiceSel.value);
+
+                ttsFields.appendChild(ttsTxtInp);
+                ttsFields.appendChild(ttsVoiceSel);
+                ttsWrap.appendChild(ttsFields);
+                ttsRow.appendChild(ttsLabel);
+                ttsRow.appendChild(ttsWrap);
+                body.appendChild(ttsRow);
+
+                // Stats
+                const statsEl = document.createElement('div');
+                statsEl.className = 'alert-stats';
+                statsEl.innerHTML =
+                    `<span>Matches: <strong>${al.matchCount.toLocaleString()}</strong></span>` +
+                    `<span>Last: <strong>${al.lastMatch || 'Never'}</strong></span>`;
+                body.appendChild(statsEl);
+
+                card.appendChild(body);
+                return card;
+            }
+
+            // =========================================================
+            // Sound
+            // =========================================================
+
+            _playAlertSound(al) {
+                if (al.soundType === 'none' || !al.soundData) return;
+                if (!al.audio) al.audio = new Audio(al.soundData);
+                al.audio.currentTime = 0;
+                al.audio.play().catch(err => console.error('Alert sound error:', err));
+            }
+
+            testAlertSound(id) {
+                const al = this.alerts.find(a => a.id === id);
+                if (!al || al.soundType === 'none' || !al.soundData) {
+                    window.alert('No sound configured for this alert.');
+                    return;
+                }
+                new Audio(al.soundData).play().catch(err => window.alert('Error playing sound: ' + err.message));
+            }
+
+            // =========================================================
+            // Folder selection + auto-watch
+            // =========================================================
+
             async selectChatLogsFolder() {
                 try {
                     const savedHandle = await this.getSavedDirectoryHandle();
@@ -153,255 +1054,282 @@
                     if (savedHandle) pickerOpts.startIn = savedHandle;
                     this.chatLogsDirHandle = await window.showDirectoryPicker(pickerOpts);
                     await this.saveDirectoryHandle(this.chatLogsDirHandle);
-                    this.chatFileHandle = null; // reset so next poll re-discovers the latest file
-                    const btn = document.getElementById('selectChatFolderBtn');
-                    btn.textContent = '✓ Folder Selected';
-                    btn.style.background = '#28a745';
+                    this.chatFileHandle = null;
+                    this.chatFileName = null;
+                    this._updateFolderButton(this.chatLogsDirHandle.name);
+                    document.getElementById('resumeBanner').style.display = 'none';
+                    if (!this.isRunning) this.start();
                 } catch (e) {
-                    if (e.name !== 'AbortError') {
-                        alert('Error selecting folder: ' + e.message);
-                    }
+                    if (e.name !== 'AbortError') window.alert('Error selecting folder: ' + e.message);
                 }
             }
 
+            async resumeWatching() {
+                if (!this._pendingHandle) return;
+                try {
+                    const perm = await this._pendingHandle.requestPermission({ mode: 'read' });
+                    if (perm === 'granted') {
+                        this.chatLogsDirHandle = this._pendingHandle;
+                        this._pendingHandle = null;
+                        document.getElementById('resumeBanner').style.display = 'none';
+                        this._updateFolderButton(this.chatLogsDirHandle.name);
+                        this.start();
+                    }
+                } catch (e) { /* user denied */ }
+            }
+
+            _updateFolderButton(name) {
+                const btn = document.getElementById('selectChatFolderBtn');
+                btn.textContent = `✓ ${name}`;
+                btn.style.background = '#28a745';
+            }
+
+            // =========================================================
+            // File discovery
+            // =========================================================
+
             async findLatestChatFile() {
-                let latestHandle = null, latestMtime = 0;
+                let latestHandle = null, latestMtime = 0, latestName = null;
                 for await (const [name, handle] of this.chatLogsDirHandle.entries()) {
                     if (handle.kind === 'file' && name.startsWith('Chat-') && name.endsWith('.log')) {
                         const file = await handle.getFile();
                         if (file.lastModified > latestMtime) {
                             latestMtime = file.lastModified;
                             latestHandle = handle;
+                            latestName = name;
                         }
                     }
                 }
-                return latestHandle;
+                return { handle: latestHandle, name: latestName };
+            }
+
+            // =========================================================
+            // Start / Stop
+            // =========================================================
+
+            toggleWatch() {
+                if (this.isRunning) this.stop();
+                else this.start();
             }
 
             start() {
                 if (this.isRunning) return;
-
-                // Get configuration
-                const pattern = document.getElementById('searchPattern').value;
-                const soundUrl = document.getElementById('soundUrl').value;
-                const soundFile = document.getElementById('soundFile').files[0];
-                const interval = parseInt(document.getElementById('pollInterval').value) * 1000;
-
-                if (!pattern) {
-                    alert('Please enter a search pattern');
-                    return;
-                }
-
-                // Configure sound
-                if (soundFile) {
-                    this.soundUrl = URL.createObjectURL(soundFile);
-                    this.audio.src = this.soundUrl;
-                } else if (soundUrl) {
-                    this.soundUrl = soundUrl;
-                    this.audio.src = soundUrl;
-                } else {
-                    // Use a default beep sound (data URI for a simple beep)
-                    this.soundUrl = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBiuByvLZiTYIGGa56+mbUQwNUavk77FiFAY7k9jxxHIsBS1+y+/bjUgLGF5+z4iJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBiuByvLZiTYIGGa56+mbUQwNUavk77FiFAY7k9jxxHIsBS1+y+/bjUgLGF5+';
-                }
-
-                this.searchPattern = pattern;
-                this.pollInterval = interval;
+                this._savePollInterval();
                 this.isRunning = true;
                 this.offset = 0;
-                this.chatFileHandle = null; // re-discover latest file on each start
-
-                // Update UI
-                document.getElementById('startBtn').disabled = true;
-                document.getElementById('stopBtn').disabled = false;
+                this.chatFileHandle = null;
+                this.chatFileName = null;
                 document.getElementById('statusDot').classList.add('active');
                 document.getElementById('statusText').textContent = 'Watching...';
-
-                // Clear display
-                this.clearDisplay();
-
-                // Start polling
+                this._setConfigCollapsed(true);
+                const btn = document.getElementById('toggleWatchBtn');
+                btn.textContent = '⏹️ Stop Watching';
+                btn.className = 'btn-danger';
+                // Clear empty state placeholder
+                const display = document.getElementById('chatDisplay');
+                if (display.querySelector('.empty-state')) display.innerHTML = '';
                 this.poll();
             }
 
             stop() {
                 this.isRunning = false;
-
-                if (this.pollTimer) {
-                    clearTimeout(this.pollTimer);
-                    this.pollTimer = null;
-                }
-
-                // Update UI
-                document.getElementById('startBtn').disabled = false;
-                document.getElementById('stopBtn').disabled = true;
+                if (this.pollTimer) { clearTimeout(this.pollTimer); this.pollTimer = null; }
                 document.getElementById('statusDot').classList.remove('active');
                 document.getElementById('statusText').textContent = 'Stopped';
+                this._setConfigCollapsed(false);
+                const btn = document.getElementById('toggleWatchBtn');
+                btn.textContent = '▶️ Start Watching';
+                btn.className = 'btn-primary';
             }
+
+            // =========================================================
+            // Polling
+            // =========================================================
 
             async poll() {
                 if (!this.isRunning) return;
-
                 try {
                     if (this.chatLogsDirHandle) {
                         await this.pollFromDirectory();
-                    } else {
-                        await this.pollFromAPI();
                     }
                 } catch (error) {
                     console.error('Error polling chat:', error);
                     document.getElementById('statusText').textContent = `Error: ${error.message}`;
                 }
-
                 this.pollTimer = setTimeout(() => this.poll(), this.pollInterval);
             }
 
-            async pollFromAPI() {
-                const response = await fetch(`/api/chat?offset=${this.offset}`);
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                const data = await response.json();
-                document.getElementById('fileInfo').textContent = `Monitoring: ${data.filename}`;
-                if (data.lines.length > 0) {
-                    this.processLines(data.lines);
-                    this.offset = data.offset;
-                }
-            }
-
             async pollFromDirectory() {
-                if (!this.chatFileHandle) {
-                    this.chatFileHandle = await this.findLatestChatFile();
-                    if (!this.chatFileHandle) throw new Error('No Chat-*.log files found in selected folder');
-                    this.offset = 0; // start from beginning of newly found file
+                // Always check for latest file — handles midnight rotation
+                const { handle, name } = await this.findLatestChatFile();
+                if (!handle) throw new Error('No Chat-*.log files found in selected folder');
+
+                // File rotated — reset read position
+                if (name !== this.chatFileName) {
+                    this.chatFileHandle = handle;
+                    this.chatFileName = name;
+                    this.offset = 0;
                 }
+
                 const file = await this.chatFileHandle.getFile();
                 document.getElementById('fileInfo').textContent = `Monitoring: ${file.name}`;
                 if (file.size > this.offset) {
                     const text = await file.slice(this.offset).text();
                     const lines = text.split('\n').filter(l => l.trim());
-                    if (lines.length > 0) {
-                        this.processLines(lines);
-                    }
+                    if (lines.length > 0) this.processLines(lines);
                     this.offset = file.size;
+                }
+            }
+
+            // =========================================================
+            // Line processing
+            // =========================================================
+
+            _parseChannel(line) {
+                const m = line.match(/\t\[([^\]]+)\]/);
+                return m ? m[1] : null;
+            }
+
+            _updateChannelDropdown() {
+                const sel = document.getElementById('channelFilter');
+                const current = sel.value;
+                const sorted = [...this.knownChannels].sort();
+                sel.innerHTML = '<option value="">All Channels</option>' +
+                    sorted.map(ch => `<option value="${this._esc(ch)}"${ch === current ? ' selected' : ''}>${this._esc(ch)}</option>`).join('');
+            }
+
+            _applyFilters() {
+                const search = (document.getElementById('chatSearch').value || '').toLowerCase();
+                const channel = document.getElementById('channelFilter').value;
+                const display = document.getElementById('chatDisplay');
+                for (const el of display.children) {
+                    if (el.classList.contains('empty-state')) continue;
+                    const text = el.textContent.toLowerCase();
+                    const matchesSearch = !search || text.includes(search);
+                    const matchesChannel = !channel || el.dataset.channel === channel;
+                    el.style.display = (matchesSearch && matchesChannel) ? '' : 'none';
                 }
             }
 
             processLines(lines) {
                 const display = document.getElementById('chatDisplay');
-
-                // Remove empty state if present
-                if (display.querySelector('.empty-state')) {
-                    display.innerHTML = '';
-                }
+                const wasAtBottom = display.scrollHeight - display.clientHeight <= display.scrollTop + 10;
+                let channelUpdated = false;
 
                 lines.forEach(line => {
+                    // Continuation lines (no timestamp prefix) are item links or other
+                    // appended content — merge them onto the previous chat line
+                    if (!/^\d{2}-\d{2}-\d{2} /.test(line)) {
+                        const lastEl = display.lastElementChild;
+                        if (lastEl && lastEl.classList.contains('chat-line')) {
+                            lastEl.textContent += ' ' + line.trim();
+                        }
+                        return;
+                    }
+
                     this.totalLines++;
 
-                    // Check if line matches pattern
-                    const isMatch = line.includes(this.searchPattern);
-
-                    if (isMatch) {
-                        this.matchCount++;
-                        this.playSound();
-
-                        // Update last match time
-                        const now = new Date();
-                        document.getElementById('lastMatch').textContent =
-                            now.toLocaleTimeString();
+                    const channel = this._parseChannel(line);
+                    if (channel && !this.knownChannels.has(channel)) {
+                        this.knownChannels.add(channel);
+                        channelUpdated = true;
                     }
 
-                    // Create line element
                     const lineEl = document.createElement('div');
                     lineEl.className = 'chat-line';
-                    if (isMatch) lineEl.classList.add('matched');
+                    if (channel) lineEl.dataset.channel = channel;
                     lineEl.textContent = line;
-
-                    // Add to display
                     display.appendChild(lineEl);
 
-                    // Keep only last N lines
-                    while (display.children.length > this.maxDisplayLines) {
+                    // Trim to maxLines (FIFO)
+                    while (display.children.length > this.maxLines) {
                         display.removeChild(display.firstChild);
                     }
+
+                    // Check each alert
+                    const lowerLine = line.toLowerCase();
+                    this.alerts.forEach(al => {
+                        if (!al.enabled || !al.pattern) return;
+                        // Channel filter: if set, only match lines from that channel
+                        if (al.channelFilter) {
+                            if (!channel) return;
+                            if (!channel.toLowerCase().includes(al.channelFilter.toLowerCase())) return;
+                        }
+                        if (lowerLine.includes(al.pattern.toLowerCase())) {
+                            al.matchCount++;
+                            al.lastMatch = new Date().toLocaleTimeString();
+                            lineEl.classList.add('matched');
+                            this._refreshAlertStats(al.id);
+                            this._playAlertSound(al);
+                            this._speakTTS(al, line);
+                        }
+                    });
                 });
 
-                // Update stats
-                document.getElementById('totalLines').textContent = this.totalLines.toLocaleString();
-                document.getElementById('matchCount').textContent = this.matchCount.toLocaleString();
-
-                // Auto-scroll to bottom
-                display.scrollTop = display.scrollHeight;
+                if (channelUpdated) this._updateChannelDropdown();
+                document.getElementById('chatFooter').textContent = `Total Lines: ${this.totalLines.toLocaleString()}`;
+                this._applyFilters();
+                if (wasAtBottom) display.scrollTop = display.scrollHeight;
             }
 
-            playSound() {
-                if (this.soundUrl) {
-                    this.audio.currentTime = 0;
-                    this.audio.play().catch(err => {
-                        console.error('Error playing sound:', err);
-                    });
-                }
-            }
-
-            testSound() {
-                const soundUrl = document.getElementById('soundUrl').value;
-                const soundFile = document.getElementById('soundFile').files[0];
-
-                if (soundFile) {
-                    const url = URL.createObjectURL(soundFile);
-                    const testAudio = new Audio(url);
-                    testAudio.play().catch(err => alert('Error playing sound: ' + err.message));
-                } else if (soundUrl) {
-                    const testAudio = new Audio(soundUrl);
-                    testAudio.play().catch(err => alert('Error playing sound: ' + err.message));
-                } else {
-                    alert('Please provide a sound URL or select a file');
-                }
-            }
+            // =========================================================
+            // Clear
+            // =========================================================
 
             clearDisplay() {
                 const display = document.getElementById('chatDisplay');
                 display.innerHTML = '';
                 this.totalLines = 0;
-                this.matchCount = 0;
-
-                document.getElementById('totalLines').textContent = '0';
-                document.getElementById('matchCount').textContent = '0';
-                document.getElementById('lastMatch').textContent = 'None';
-
+                this.knownChannels.clear();
+                this._updateChannelDropdown();
+                document.getElementById('chatFooter').textContent = 'Total Lines: 0';
+                this.alerts.forEach(al => { al.matchCount = 0; al.lastMatch = ''; });
+                this.renderAlerts();
                 if (!this.isRunning) {
                     display.innerHTML = `
                         <div class="empty-state">
                             <div class="empty-state-icon">💬</div>
                             <h3>Chat watcher is stopped</h3>
-                            <p>Configure your settings and click "Start Watching" to begin monitoring chat logs.</p>
-                        </div>
-                    `;
+                            <p>Select a ChatLogs folder and click "Start Watching" to begin monitoring.</p>
+                        </div>`;
                 }
+            }
+
+            // =========================================================
+            // Init
+            // =========================================================
+
+            async init() {
+                this._loadPollInterval();
+                this._loadAlerts();
+                this.renderAlerts();
+                this._loadVoices();
+                if (localStorage.getItem('gorgon-chatwatcher-section-collapsed')) {
+                    document.getElementById('alertsList').classList.add('alerts-collapsed');
+                    document.getElementById('alertsSectionChevron').textContent = '▶';
+                }
+
+                const saved = await this.getSavedDirectoryHandle();
+                if (!saved) return;
+
+                try {
+                    const perm = await saved.queryPermission({ mode: 'read' });
+                    if (perm === 'granted') {
+                        this.chatLogsDirHandle = saved;
+                        this._updateFolderButton(saved.name);
+                        this.start();
+                    } else if (perm === 'prompt') {
+                        // Can't call requestPermission without user gesture — show resume button
+                        this._pendingHandle = saved;
+                        document.getElementById('resumeBanner').style.display = 'flex';
+                    }
+                } catch (e) { /* stale handle */ }
             }
         }
 
-        // Initialize chat watcher
         const chatWatcher = new ChatWatcher();
-
-        // Restore saved ChatLogs folder if permission already granted this session
-        (async () => {
-            const saved = await chatWatcher.getSavedDirectoryHandle();
-            if (!saved) return;
-            try {
-                const perm = await saved.queryPermission({ mode: 'read' });
-                if (perm === 'granted') {
-                    chatWatcher.chatLogsDirHandle = saved;
-                    const btn = document.getElementById('selectChatFolderBtn');
-                    btn.textContent = '✓ Folder Selected';
-                    btn.style.background = '#28a745';
-                }
-            } catch { /* stale handle, ignore */ }
-        })();
-
-        // Stop watching when page unloads
-        window.addEventListener('beforeunload', () => {
-            chatWatcher.stop();
-        });
+        document.addEventListener('DOMContentLoaded', () => chatWatcher.init());
+        window.addEventListener('beforeunload', () => chatWatcher.stop());
     </script>
 </body>
 </html>

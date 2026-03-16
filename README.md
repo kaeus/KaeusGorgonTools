@@ -54,12 +54,22 @@ A web-based utility for tracking inventory, storage, vendors, and active quests 
   - Adjacent zone navigation
 
 - 💬 **Chat Watcher** (chat-watcher.html) - Real-time chat log monitoring
-  - Monitor live chat logs for specific patterns (e.g., NPC spawns)
-  - Configurable search patterns and alert sounds
-  - Customizable polling interval (default 2 seconds)
-  - Visual highlighting of matching lines
-  - Statistics tracking (total lines, matches, last match time)
-  - Auto-scrolling chat display with line limit
+  - Auto-starts watching when the ChatLogs folder permission is already granted; shows a one-click resume banner otherwise
+  - Full chat display showing all lines (not just matches), with a fixed scrollable window
+  - Item link continuation lines (no timestamp prefix) are merged onto their preceding chat line
+  - **Channel filter** — dropdown populated dynamically from parsed `[Channel]` names; filter the chat view to any single channel or show all
+  - **Search** — live text search filters the chat window in real-time
+  - Customizable poll interval (1–30 seconds), persisted across reloads
+  - Midnight file rotation handled automatically — switches to the new `Chat-*.log` without restarting
+  - **Multi-alert system** — add any number of independent alerts, each with:
+    - **Channel filter** — restrict the alert to a specific channel (case-insensitive substring match on the parsed channel name)
+    - **Pattern** — case-insensitive substring match against the full line
+    - **Sound** — none, URL, or uploaded audio file (saved as base64 so it persists across reloads)
+    - **TTS** — optional Text-to-Speech with custom speak text (`{line}` placeholder replaced with the matched line) and per-alert voice selection
+    - **Enable/disable toggle** — pause an alert without deleting it; state persisted
+    - Per-alert match count and last match time, visible in the collapsed header
+  - Alert cards are individually collapsible; the entire Alerts section is also collapsible
+  - Matched lines are highlighted in the chat display; all alert configs persist in localStorage
 
 ## Usage
 
@@ -72,6 +82,7 @@ Open `index.html` directly in Chrome or Edge (no server needed). On first load:
 
 For the **Chat Watcher**, select your ChatLogs folder once:
 `%LocalAppData%Low\Elder Game\Project Gorgon\ChatLogs`
+Watching starts automatically on selection and resumes on page reload if the browser still holds permission.
 
 For **vendor auto-capture**, select your Player.log once from the Vendors tab:
 `%LocalAppData%Low\Elder Game\Project Gorgon\Player.log`
@@ -87,6 +98,21 @@ Folder and file selections are persisted via IndexedDB and auto-resume if the br
 
 **CDN Data** (fetched automatically):
 - Quest, item, NPC, and storage vault definitions from `https://cdn.projectgorgon.com/` (version auto-detected by following the redirect)
+
+## Firefox Notes (and non-Chromium browsers)
+
+Firefox does not support the File System Access API (`showDirectoryPicker` / `showOpenFilePicker`), so the **Select Folder** and **Watch Player.log** buttons are hidden automatically. Instead, use the **Manual File Loading** section (expanded by default on Firefox):
+
+**Character & inventory data**
+1. Navigate to `%LocalAppData%Low\Elder Game\Project Gorgon\Reports` in Windows Explorer.
+2. Use **Character Data** to select your `Character_*.json` file.
+3. Use **Items Data** to select your `*_items_*.json` file.
+
+**Vendor data from Player.log**
+1. Use **Player.log (vendor data)** to select `Player.log` from `%LocalAppData%Low\Elder Game\Project Gorgon\`.
+2. Click **Import Vendor Data** — the tracker scans the entire file and extracts all vendor favor and cap events.
+
+> **Note:** Live log watching is not supported in Firefox. The import is a one-time snapshot of the file at upload time. To get updated vendor data after visiting merchants in-game, re-select and re-import `Player.log`. You will also need to re-upload files on every page reload, as file handles cannot be persisted between sessions.
 
 ## Notes
 

@@ -39,7 +39,7 @@
             <div style="font-size: 0.8em; color: #6c757d; margin-bottom: 10px;">
                 Reports folder: <code style="background: #f0f0f0; padding: 1px 5px; border-radius: 3px;">%LocalAppData%Low\Elder Game\Project Gorgon\Reports</code>
             </div>
-            <details style="margin-top: 10px;">
+            <details id="manualFileLoading" style="margin-top: 10px;">
                 <summary style="cursor: pointer; padding: 10px; background: #f8f9fa; border-radius: 6px; font-weight: 600;">Manual File Loading</summary>
                 <div style="padding: 15px 0;">
                     <div class="file-input-group">
@@ -49,6 +49,19 @@
                     <div class="file-input-group">
                         <label for="itemsFile">Items Data:</label>
                         <input type="file" id="itemsFile" accept=".json">
+                    </div>
+                    <div class="file-input-group">
+                        <label for="playerLogImportFile" style="font-weight: 600;">Player.log (vendor data):</label>
+                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                            <input type="file" id="playerLogImportFile" accept=".log,.txt">
+                            <button onclick="importPlayerLogFile()" style="padding: 6px 14px; background: #495057; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 0.9em; white-space: nowrap;">Import Vendor Data</button>
+                        <div id="playerLogImportStatus" style="font-size: 0.82em; color: #6c757d;"></div>
+                        </div>
+                    </div>
+                    <div class="file-input-group">
+                        <div id="playerLogImportNote" style="font-size: 0.8em; color: #856404; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 5px 8px; margin-top: 4px; display: none;">
+                            Live log watching isn't supported in this browser. Re-upload player.log after visiting vendors to get updated favor and cap data.
+                        </div>
                     </div>
                 </div>
             </details>
@@ -2820,6 +2833,74 @@
             }
         }
 
+        async function importPlayerLogFile() {
+            const input = document.getElementById('playerLogImportFile');
+            const statusEl = document.getElementById('playerLogImportStatus');
+            if (!input.files.length) { statusEl.textContent = 'Please select a player.log file first.'; return; }
+            const file = input.files[0];
+
+            statusEl.style.color = '#6c757d';
+            statusEl.textContent = `Reading ${(file.size / 1e6).toFixed(1)} MB…`;
+            // Yield to let the browser paint the status before the blocking parse
+            await new Promise(r => setTimeout(r, 50));
+
+            try {
+                const text = await file.text();
+                const lines = text.split('\n');
+
+                // Use a local map so we don't pollute the running watcher's state
+                const localIdMap = {};
+                let localLastId = null;
+                let vendorCount = 0;
+
+                for (const line of lines) {
+                    const im = RE_START_INTERACTION.exec(line);
+                    if (im) {
+                        const id = parseInt(im[1]);
+                        localIdMap[id] = im[2];
+                        localLastId = id;
+                        continue;
+                    }
+                    const vm = RE_VENDOR_SCREEN.exec(line);
+                    if (vm) {
+                        const [, npcId, favorLevel, remaining, resetAt, cap, description] = vm;
+                        const id = parseInt(npcId);
+                        const internalKey = localIdMap[id] || npcIdToKeyMap[id] || null;
+                        storeBrowser.applyVendorCaptures({ [id]: {
+                            npcId: id, npcInternalKey: internalKey,
+                            favorLevel, remaining: parseInt(remaining),
+                            resetAt: parseInt(resetAt), cap: parseInt(cap),
+                            description, capturedAt: Date.now(),
+                        }});
+                        vendorCount++;
+                        continue;
+                    }
+                    const vu = RE_VENDOR_UPDATE.exec(line);
+                    if (vu) {
+                        if (localLastId == null) continue;
+                        const [, remaining, resetAt, cap] = vu;
+                        const id = localLastId;
+                        const internalKey = localIdMap[id] || npcIdToKeyMap[id] || null;
+                        storeBrowser.applyVendorCaptures({ [id]: {
+                            npcId: id, npcInternalKey: internalKey,
+                            remaining: parseInt(remaining), resetAt: parseInt(resetAt),
+                            cap: parseInt(cap), capturedAt: Date.now(),
+                        }});
+                        vendorCount++;
+                    }
+                }
+
+                // Merge into the running watcher map so live polling benefits too
+                Object.assign(npcIdToKeyMap, localIdMap);
+
+                statusEl.style.color = '#155724';
+                statusEl.textContent = `✓ Imported ${vendorCount} vendor event(s) from ${lines.length.toLocaleString()} lines`;
+            } catch (e) {
+                statusEl.style.color = '#721c24';
+                statusEl.textContent = `✗ Error: ${e.message}`;
+            }
+        }
+
         // ── Vendor Price Tracker ──────────────────────────────────────────────
 
         function generateId() {
@@ -3648,6 +3729,18 @@
 
         // Initialize tab from URL hash
         initializeTabFromHash();
+
+        // Hide File System Access API buttons on browsers that don't support them (e.g. Firefox)
+        if (typeof window.showOpenFilePicker !== 'function' || typeof window.showDirectoryPicker !== 'function') {
+            const folderBtn = document.getElementById('selectFolderBtn');
+            const logBtn = document.getElementById('selectPlayerLogBtn');
+            if (folderBtn) folderBtn.style.display = 'none';
+            if (logBtn) logBtn.style.display = 'none';
+            const manualSection = document.getElementById('manualFileLoading');
+            if (manualSection) manualSection.open = true;
+            const logNote = document.getElementById('playerLogImportNote');
+            if (logNote) logNote.style.display = 'block';
+        }
 
         // Auto-load data on page load
         loadAllDataFromAPI();
