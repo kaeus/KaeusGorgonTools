@@ -3997,6 +3997,10 @@ html[data-theme="dark"] .shops-card-table th {
     border-bottom-color: #3a3a5a;
 }
 
+html[data-theme="dark"] .shops-card-table td {
+    color: #c0c0e0;
+}
+
 html[data-theme="dark"] .shops-card-table td:first-child {
     color: #c0c0e0;
 }
@@ -4156,7 +4160,7 @@ html[data-theme="dark"] #characterPickerRow label {
 }
 
 html[data-theme="dark"] #reportsWatchStatus {
-    color: #8888aa !important;
+    color: #8888aa;
 }
 
 /* Leaflet popup */
