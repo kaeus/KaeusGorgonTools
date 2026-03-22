@@ -117,6 +117,70 @@
         .summary-value.out { color: #00ff88; }
         .summary-value.inc { color: #ff6b6b; }
 
+        .fight-selector {
+            background: #0d0d20;
+            border-bottom: 1px solid #2a2a4a;
+            padding: 8px 20px;
+        }
+        .fight-selector-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .fight-btn {
+            padding: 4px 12px;
+            font-size: 0.8em;
+            background: #1a1a2e;
+            border: 1px solid #333;
+            color: #888;
+            cursor: pointer;
+            border-radius: 4px;
+            white-space: nowrap;
+            transition: background 0.15s;
+        }
+        .fight-btn:hover { background: #252540; color: #ccc; }
+        .fight-btn.active { background: #0f3460; color: #fff; border-color: #446; }
+        .fight-btn.live { color: #00ff88; border-color: #224433; }
+        .fight-btn.live.active { background: #003322; border-color: #00aa55; }
+        .fight-btn.history-toggle { color: #aabbdd; }
+        .fight-btn.history-toggle.open { background: #1a2040; border-color: #446; color: #ccddf0; }
+        #fightDaySelect {
+            padding: 4px 8px; font-size: 0.8em; background: #1a1a2e;
+            border: 1px solid #333; color: #aabbdd; border-radius: 4px; cursor: pointer;
+        }
+        #fightDaySelect:focus { outline: none; border-color: #446; }
+        .fight-current-label { font-size: 0.8em; color: #ffaa44; font-style: italic; padding: 0 4px; }
+        .fight-selected-label { font-size: 0.8em; color: #88aaff; padding: 0 4px; }
+
+        .fight-history-panel {
+            margin-top: 8px;
+            background: #111126;
+            border: 1px solid #2a2a4a;
+            border-radius: 6px;
+            max-height: 260px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #333 transparent;
+        }
+        .fight-history-panel::-webkit-scrollbar { width: 6px; }
+        .fight-history-panel::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+        .fight-history-table { width: 100%; border-collapse: collapse; font-size: 0.83em; }
+        .fight-history-table th {
+            padding: 6px 12px; text-align: left; color: #666;
+            font-size: 0.78em; font-weight: normal; border-bottom: 1px solid #2a2a4a;
+            position: sticky; top: 0; background: #111126; user-select: none;
+        }
+        .fight-history-table td { padding: 6px 12px; border-bottom: 1px solid #1a1a38; cursor: pointer; }
+        .fight-history-table tr:last-child td { border-bottom: none; }
+        .fight-history-table tbody tr:hover td { background: #1a1a38; }
+        .fight-history-table tbody tr.selected td { background: #0f3460; }
+        .fight-history-table .fh-num { color: #666; width: 40px; }
+        .fight-history-table .fh-time { color: #aaa; width: 120px; font-family: monospace; }
+        .fight-history-table .fh-dur { color: #88aaff; font-family: monospace; width: 70px; }
+        .fight-history-table .fh-dmg { color: #00ff88; font-family: monospace; text-align: right; }
+        .fight-history-table .fh-dps { color: #88ccff; font-family: monospace; text-align: right; }
+        .fight-history-table .fh-hits { color: #aaa; text-align: right; }
+
         .expand-icon { display: inline-block; width: 14px; color: #777; font-size: 0.8em; }
         .sort-icon { font-size: 0.7em; margin-left: 3px; }
         .player-name { font-weight: bold; }
@@ -152,18 +216,23 @@
                     <div class="help-text">Used to separate your damage from others. Auto-detected from log.</div>
                 </div>
             </div>
-            <div class="control-row">
-                <label>Window:</label>
+            <div class="control-row" id="windowControlRow">
+                <label>Live Window:</label>
                 <div class="window-btns">
                     <button class="window-btn" data-secs="10"  onclick="tracker.setWindow(10)">10s</button>
                     <button class="window-btn active" data-secs="30" onclick="tracker.setWindow(30)">30s</button>
                     <button class="window-btn" data-secs="60"  onclick="tracker.setWindow(60)">60s</button>
                     <button class="window-btn" data-secs="120" onclick="tracker.setWindow(120)">2m</button>
+                    <span class="help-text" style="margin-left:6px">Rolling average used in LIVE mode only</span>
                 </div>
             </div>
             <div class="control-row">
                 <label></label>
-                <button class="btn-danger" onclick="tracker.clearEvents()">🗑️ Clear Data</button>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <button class="btn-danger" onclick="tracker.clearEvents()">🗑️ Clear Data</button>
+                    <button class="btn-secondary" id="parseAllBtn" onclick="tracker.parseAllLogs()">📚 Parse All Logs</button>
+                    <span class="help-text">Load fights from all available chat log files</span>
+                </div>
             </div>
         </div>
 
@@ -175,7 +244,33 @@
             <div id="fileInfo">—</div>
         </div>
 
+        <div class="fight-selector" id="fightSelector">
+            <div class="fight-selector-row">
+                <button class="fight-btn live active" id="liveModeBtn" onclick="tracker.selectFight(null)">● LIVE</button>
+                <button class="fight-btn history-toggle" id="fightHistoryToggle" onclick="tracker.toggleFightHistory()">📋 Fight History <span id="fightCount">(0)</span> ▾</button>
+                <select id="fightDaySelect" onchange="tracker.selectDay(this.value)" title="Filter by day"></select>
+                <span id="fightStatusLabel" class="fight-current-label"></span>
+            </div>
+            <div class="fight-history-panel" id="fightHistoryPanel" style="display:none">
+                <table class="fight-history-table">
+                    <thead><tr>
+                        <th class="fh-num">#</th>
+                        <th class="fh-time">Time</th>
+                        <th class="fh-dur">Duration</th>
+                        <th class="fh-dmg">Your Dmg</th>
+                        <th class="fh-dps">Your DPS</th>
+                        <th class="fh-hits">Hits</th>
+                    </tr></thead>
+                    <tbody id="fightHistoryBody"></tbody>
+                </table>
+            </div>
+        </div>
+
         <div class="summary-row">
+            <div class="summary-item">
+                <span class="summary-label">Viewing</span>
+                <span class="summary-value" id="sumViewing" style="color:#aaa;font-size:0.9em">LIVE</span>
+            </div>
             <div class="summary-item">
                 <span class="summary-label">Your DPS</span>
                 <span class="summary-value out" id="sumYourDps">—</span>
@@ -232,20 +327,21 @@
                 </div>
                 <div class="panel">
                     <div class="panel-header">
-                        <h3>Other Players</h3>
-                        <span class="panel-total" id="groupTotalDps">—</span>
+                        <h3>Damage by Target</h3>
+                        <span class="panel-total" id="targetTotalDps">—</span>
                     </div>
-                    <table class="dps-table" id="groupDpsTable">
+                    <table class="dps-table" id="targetDpsTable">
                         <thead>
                             <tr>
-                                <th onclick="tracker.sortTable('group','name')"   data-col="name">Player <span class="sort-icon">↕</span></th>
-                                <th onclick="tracker.sortTable('group','dps')"    data-col="dps" class="sorted">DPS <span class="sort-icon">↓</span></th>
-                                <th onclick="tracker.sortTable('group','damage')" data-col="damage">Damage <span class="sort-icon">↕</span></th>
-                                <th onclick="tracker.sortTable('group','hits')"   data-col="hits">Hits <span class="sort-icon">↕</span></th>
+                                <th onclick="tracker.sortTable('target','name')"   data-col="name">Target <span class="sort-icon">↕</span></th>
+                                <th onclick="tracker.sortTable('target','dps')"    data-col="dps" class="sorted">DPS <span class="sort-icon">↓</span></th>
+                                <th onclick="tracker.sortTable('target','damage')" data-col="damage">Damage <span class="sort-icon">↕</span></th>
+                                <th onclick="tracker.sortTable('target','hits')"   data-col="hits">Hits <span class="sort-icon">↕</span></th>
+                                <th>%</th>
                                 <th class="bar-cell"></th>
                             </tr>
                         </thead>
-                        <tbody id="groupDpsBody"></tbody>
+                        <tbody id="targetDpsBody"></tbody>
                     </table>
                 </div>
             </div>
@@ -293,8 +389,8 @@
         <!-- RAW LOG TAB -->
         <div class="tab-content" id="tab-raw">
             <p style="color:#666; font-size:0.85em; margin:0 0 10px">
-                All <code>[Combat]</code> lines from the current log. <span style="color:#aaccff">Blue</span> = matched a damage pattern.
-                <span style="color:#554444">Dark</span> = unmatched (helps identify log formats not yet supported).
+                When viewing a fight: matched <code>[Combat]</code> lines for that fight. When live: last 200 <code>[Combat]</code> lines from the current log.
+                <span style="color:#aaccff">Blue</span> = matched a damage pattern. <span style="color:#554444">Dark</span> = unmatched.
             </p>
             <div class="raw-log" id="rawLog"></div>
         </div>
@@ -364,16 +460,22 @@
             this.fileHandle = null;
             this.offset     = 0;
             this.pollTimer  = null;
-            this.events     = [];   // parsed damage events
+            this.events     = [];   // live window buffer (recent events only)
             this.rawLines   = [];   // last 200 [Combat] lines
             this.unmatchedCount = 0;
             this.totalParsed    = 0;
             this.windowSecs = parseInt(localStorage.getItem('gorgon-combat-window') || '30');
             this.playerName = localStorage.getItem('gorgon-combat-player') || '';
-            this.sortState    = { your: 'dps', group: 'dps', incSrc: 'dps' };
-            this.expandedRows = { group: new Set(), incSrc: new Set() };
+            this.sortState    = { your: 'dps', target: 'dps', incSrc: 'dps' };
+            this.expandedRows = { target: new Set(), incSrc: new Set() };
             this.activeTab    = 'outgoing';
             this._renderTimer = null;
+            // Fight tracking
+            this.fights          = [];   // completed: { id, startTime, endTime, duration, events[], label }
+            this.currentFight    = null; // { startTime, lastEventTime, events[] }
+            this.selectedFightId = null; // null = live view
+            this.selectedDay     = null; // null = auto (most recent day with fights)
+            this.FIGHT_GAP_MS    = 25000;
         }
 
         // ── IndexedDB ─────────────────────────────────────────────────────────
@@ -461,8 +563,10 @@
             const file = await handle.getFile();
             document.getElementById('fileInfo').textContent = `Watching: ${file.name}`;
 
-            if (handle !== this.fileHandle) {
-                // New file — read from beginning to catch recent history
+            // Compare by filename — handle object references change on every entries() call
+            if (file.name !== this._watchedFileName) {
+                // Switched to a new log file — read from beginning to build fight history
+                this._watchedFileName = file.name;
                 this.fileHandle = handle;
                 this.offset = 0;
             }
@@ -472,8 +576,8 @@
             const text  = await file.slice(this.offset).text();
             this.offset = file.size;
 
-            const MAX_HISTORY_MS = 5 * 60 * 1000; // only keep last 5 min on initial read
-            const cutoff = Date.now() - MAX_HISTORY_MS;
+            // Live window buffer: only keep last 5 min on initial read to avoid flooding display
+            const liveCutoff = Date.now() - 5 * 60 * 1000;
 
             const lines = text.split('\n');
             for (const line of lines) {
@@ -493,20 +597,290 @@
 
                 const ev = parseCombatLine(line);
                 if (ev) {
-                    if (ev.time >= cutoff) {
-                        this.events.push(ev);
-                        this.totalParsed++;
+                    this.totalParsed++;
+                    this.processDamageEvent(ev); // always track fights
+                    if (ev.time >= liveCutoff) {
+                        this.events.push(ev);    // only recent events in live buffer
                     }
                 } else {
                     this.unmatchedCount++;
                 }
             }
 
-            // Prune events older than max window (2 minutes buffer)
+            // Prune live buffer to rolling window
             const prune = Date.now() - 130_000;
             this.events = this.events.filter(e => e.time >= prune);
 
             this.scheduleRender();
+        }
+
+        // ── Fight tracking ─────────────────────────────────────────────────────
+        processDamageEvent(ev) {
+            if (!this.currentFight) {
+                this.currentFight = { startTime: ev.time, lastEventTime: ev.time, events: [ev] };
+            } else if (ev.time - this.currentFight.lastEventTime > this.FIGHT_GAP_MS) {
+                this.finalizeCurrentFight();
+                this.currentFight = { startTime: ev.time, lastEventTime: ev.time, events: [ev] };
+            } else {
+                this.currentFight.events.push(ev);
+                this.currentFight.lastEventTime = ev.time;
+            }
+        }
+
+        finalizeCurrentFight() {
+            if (!this.currentFight || !this.currentFight.events.length) return;
+            const f = this.currentFight;
+            const duration = Math.max(1, (f.lastEventTime - f.startTime) / 1000);
+            const t = new Date(f.startTime);
+            const pad = n => n.toString().padStart(2, '0');
+            const label = `${t.getMonth()+1}/${t.getDate()} ${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`;
+            const fight = { id: f.startTime, startTime: f.startTime, endTime: f.lastEventTime, duration, events: f.events, label };
+            // Dedup guard — prevents double-adding if a re-read ever occurs
+            if (!this.fights.some(x => x.id === fight.id)) {
+                this.fights.push(fight);
+                if (this.fights.length > 2000) this.fights.shift();
+            }
+            this.currentFight = null;
+        }
+
+        checkFightTimeout() {
+            if (this.currentFight && Date.now() - this.currentFight.lastEventTime > this.FIGHT_GAP_MS) {
+                this.finalizeCurrentFight();
+                this.renderFightBar();
+            }
+        }
+
+        selectFight(id) {
+            this.selectedFightId = id;
+            // Close the panel after selecting
+            document.getElementById('fightHistoryPanel').style.display = 'none';
+            document.getElementById('fightHistoryToggle').classList.remove('open');
+            this.renderFightBar();
+            this.render();
+        }
+
+        toggleFightHistory() {
+            const panel = document.getElementById('fightHistoryPanel');
+            const toggle = document.getElementById('fightHistoryToggle');
+            const isOpen = panel.style.display !== 'none';
+            panel.style.display = isOpen ? 'none' : 'block';
+            toggle.classList.toggle('open', !isOpen);
+        }
+
+        getDisplayEvents() {
+            if (this.selectedFightId !== null) {
+                const fight = this.fights.find(f => f.id === this.selectedFightId);
+                return fight ? fight.events : [];
+            }
+            return this.getWindowEvents();
+        }
+
+        getDisplayDuration() {
+            if (this.selectedFightId !== null) {
+                const fight = this.fights.find(f => f.id === this.selectedFightId);
+                return fight ? fight.duration : 1;
+            }
+            return this.windowSecs;
+        }
+
+        // "YYYY-MM-DD" key for a fight's day
+        dayKey(fight) {
+            const d = new Date(fight.startTime);
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        }
+
+        // Distinct days that have at least one fight with player outgoing damage, newest first
+        getAvailableDays() {
+            const seen = new Set();
+            const days = [];
+            for (const f of [...this.fights].reverse()) {
+                if (this.playerName && !f.events.some(e => e.source === this.playerName)) continue;
+                const k = this.dayKey(f);
+                if (!seen.has(k)) { seen.add(k); days.push(k); }
+            }
+            return days; // already newest-first
+        }
+
+        // The day currently being shown (resolves null → most recent day)
+        getEffectiveDay() {
+            const days = this.getAvailableDays();
+            if (!days.length) return null;
+            if (this.selectedDay && days.includes(this.selectedDay)) return this.selectedDay;
+            return days[0]; // default to most recent
+        }
+
+        // Fights for the effective day that have player outgoing damage
+        getVisibleFights() {
+            const day = this.getEffectiveDay();
+            return this.fights.filter(f => {
+                if (this.playerName && !f.events.some(e => e.source === this.playerName)) return false;
+                return !day || this.dayKey(f) === day;
+            });
+        }
+
+        selectDay(dayStr) {
+            this.selectedDay = dayStr || null;
+            // If selected fight is no longer in the visible set, deselect it
+            if (this.selectedFightId !== null) {
+                const still = this.getVisibleFights().find(f => f.id === this.selectedFightId);
+                if (!still) { this.selectedFightId = null; }
+            }
+            this.renderFightBar();
+            this.render();
+        }
+
+        renderFightBar() {
+            // LIVE button state
+            document.getElementById('liveModeBtn').classList.toggle('active', this.selectedFightId === null);
+
+            // Day selector
+            const daySelect = document.getElementById('fightDaySelect');
+            const availDays = this.getAvailableDays();
+            const effectiveDay = this.getEffectiveDay();
+            // Rebuild options only when the day list changes (avoid losing focus mid-type)
+            const dayOptValues = [...daySelect.options].map(o => o.value);
+            const needsRebuild = availDays.length !== dayOptValues.length ||
+                availDays.some((d, i) => d !== dayOptValues[i]);
+            if (needsRebuild) {
+                daySelect.innerHTML = '';
+                for (const d of availDays) {
+                    const opt = document.createElement('option');
+                    opt.value = d;
+                    const dt = new Date(d + 'T00:00:00');
+                    opt.textContent = dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+                    daySelect.appendChild(opt);
+                }
+            }
+            if (effectiveDay) daySelect.value = effectiveDay;
+            daySelect.style.display = availDays.length > 0 ? '' : 'none';
+
+            // Status label
+            const statusEl = document.getElementById('fightStatusLabel');
+            if (this.currentFight && this.selectedFightId === null) {
+                const dur = Math.round((Date.now() - this.currentFight.startTime) / 1000);
+                statusEl.textContent = `⚔ Fight in progress (${this.fmtDur(dur)})`;
+                statusEl.className = 'fight-current-label';
+            } else if (this.selectedFightId !== null) {
+                const fight = this.fights.find(f => f.id === this.selectedFightId);
+                const visibleFights = this.getVisibleFights();
+                const fightNum = visibleFights.indexOf(fight) + 1;
+                statusEl.textContent = fight ? `Viewing Fight ${fightNum} · ${fight.label} · ${this.fmtDur(Math.round(fight.duration))}` : '';
+                statusEl.className = 'fight-selected-label';
+            } else {
+                statusEl.textContent = '';
+            }
+
+            // Fight count badge
+            const visibleFights = this.getVisibleFights();
+            document.getElementById('fightCount').textContent = `(${visibleFights.length})`;
+
+            // Populate history table
+            const tbody = document.getElementById('fightHistoryBody');
+            tbody.innerHTML = '';
+
+            if (visibleFights.length === 0) {
+                const msg = !this.playerName ? 'Set your character name to track fights'
+                    : availDays.length === 0 ? 'No fights with your outgoing damage yet'
+                    : 'No fights on this day';
+                tbody.innerHTML = `<tr><td colspan="6" style="color:#555;text-align:center;padding:16px">${msg}</td></tr>`;
+                return;
+            }
+
+            const sorted = [...visibleFights].reverse();
+            sorted.forEach((f, i) => {
+                const fightNum = visibleFights.length - i;
+                const yourEvts = this.playerName ? f.events.filter(e => e.source === this.playerName) : [];
+                const yourDmg  = yourEvts.reduce((s, e) => s + e.damage, 0);
+                const yourDps  = yourDmg / f.duration;
+                const yourHits = yourEvts.length;
+                const tr = document.createElement('tr');
+                tr.className = this.selectedFightId === f.id ? 'selected' : '';
+                tr.innerHTML = `
+                    <td class="fh-num">${fightNum}</td>
+                    <td class="fh-time">${f.label.split(' ').slice(1).join(' ')}</td>
+                    <td class="fh-dur">${this.fmtDur(Math.round(f.duration))}</td>
+                    <td class="fh-dmg">${this.fmt(yourDmg)}</td>
+                    <td class="fh-dps">${this.fmtDps(yourDps)}</td>
+                    <td class="fh-hits">${yourHits}</td>`;
+                tr.onclick = () => this.selectFight(f.id);
+                tbody.appendChild(tr);
+            });
+        }
+
+        fmtDur(secs) {
+            if (secs < 60) return secs + 's';
+            const m = Math.floor(secs / 60);
+            const s = secs % 60;
+            return s > 0 ? `${m}m ${s}s` : `${m}m`;
+        }
+
+        async parseAllLogs() {
+            if (!this.dirHandle) { alert('Select a ChatLogs folder first'); return; }
+
+            const btn = document.getElementById('parseAllBtn');
+            btn.textContent = '⏳ Parsing...';
+            btn.disabled = true;
+
+            try {
+                const files = [];
+                for await (const [name, handle] of this.dirHandle.entries()) {
+                    if (handle.kind === 'file' && name.startsWith('Chat-') && name.endsWith('.log')) {
+                        const f = await handle.getFile();
+                        files.push({ name, handle, mtime: f.lastModified });
+                    }
+                }
+                files.sort((a, b) => a.mtime - b.mtime);
+
+                // Process all files — existingIds check below prevents duplicates with live data
+                const toProcess = files;
+                const existingIds = new Set(this.fights.map(f => f.id));
+                const newFights = [];
+                let tempCurrent = null;
+
+                const finalizeTemp = () => {
+                    if (!tempCurrent || !tempCurrent.events.length) return;
+                    const f = tempCurrent;
+                    const duration = Math.max(1, (f.lastEventTime - f.startTime) / 1000);
+                    const t = new Date(f.startTime);
+                    const pad = n => n.toString().padStart(2, '0');
+                    const label = `${t.getMonth()+1}/${t.getDate()} ${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`;
+                    if (!existingIds.has(f.startTime)) {
+                        newFights.push({ id: f.startTime, startTime: f.startTime, endTime: f.lastEventTime, duration, events: f.events, label });
+                    }
+                    tempCurrent = null;
+                };
+
+                for (const { handle } of toProcess) {
+                    const file = await handle.getFile();
+                    const text = await file.text();
+                    for (const line of text.split('\n')) {
+                        if (!line.includes('[Combat]')) continue;
+                        const ev = parseCombatLine(line);
+                        if (!ev) continue;
+                        if (!tempCurrent) {
+                            tempCurrent = { startTime: ev.time, lastEventTime: ev.time, events: [ev] };
+                        } else if (ev.time - tempCurrent.lastEventTime > this.FIGHT_GAP_MS) {
+                            finalizeTemp();
+                            tempCurrent = { startTime: ev.time, lastEventTime: ev.time, events: [ev] };
+                        } else {
+                            tempCurrent.events.push(ev);
+                            tempCurrent.lastEventTime = ev.time;
+                        }
+                    }
+                }
+                finalizeTemp();
+
+                // Prepend (older than current session), cap at 2000 total
+                this.fights = [...newFights, ...this.fights].slice(-2000);
+
+                btn.textContent = `✓ ${newFights.length} fights loaded`;
+                setTimeout(() => { btn.textContent = '📚 Parse All Logs'; btn.disabled = false; }, 3000);
+                this.renderFightBar();
+            } catch (e) {
+                console.error(e);
+                btn.textContent = '❌ Error';
+                setTimeout(() => { btn.textContent = '📚 Parse All Logs'; btn.disabled = false; }, 3000);
+            }
         }
 
         scheduleRender() {
@@ -531,8 +905,13 @@
 
         clearEvents() {
             this.events = [];
+            this.fights = [];
+            this.currentFight = null;
+            this.selectedFightId = null;
+            this.selectedDay = null;
             this.totalParsed = 0;
             this.unmatchedCount = 0;
+            this.renderFightBar();
             this.render();
         }
 
@@ -548,7 +927,7 @@
         sortTable(which, col) {
             this.sortState[which] = col;
             // Update header indicators
-            const tableId = which === 'your' ? 'yourDpsTable' : which === 'group' ? 'groupDpsTable' : 'incSourceTable';
+            const tableId = which === 'your' ? 'yourDpsTable' : which === 'target' ? 'targetDpsTable' : 'incSourceTable';
             document.querySelectorAll(`#${tableId} th`).forEach(th => {
                 th.classList.toggle('sorted', th.dataset.col === col);
                 const icon = th.querySelector('.sort-icon');
@@ -563,8 +942,8 @@
             return this.events.filter(e => e.time >= cutoff);
         }
 
-        aggregateByAbility(events) {
-            // Returns [{ability, damage, hits, dps}] sorted by dps desc
+        aggregateByAbility(events, duration) {
+            const dur = duration ?? this.windowSecs;
             const map = {};
             for (const e of events) {
                 const key = e.ability || '(unknown)';
@@ -572,10 +951,11 @@
                 map[key].damage += e.damage;
                 map[key].hits++;
             }
-            return Object.values(map).map(r => ({ ...r, dps: r.damage / this.windowSecs }));
+            return Object.values(map).map(r => ({ ...r, dps: r.damage / dur }));
         }
 
-        aggregateBySource(events) {
+        aggregateBySource(events, duration) {
+            const dur = duration ?? this.windowSecs;
             const map = {};
             for (const e of events) {
                 const key = e.source;
@@ -587,7 +967,19 @@
                 map[key].abilities[ab].damage += e.damage;
                 map[key].abilities[ab].hits++;
             }
-            return Object.values(map).map(r => ({ ...r, dps: r.damage / this.windowSecs }));
+            return Object.values(map).map(r => ({ ...r, dps: r.damage / dur }));
+        }
+
+        aggregateByTarget(events, duration) {
+            const dur = duration ?? this.windowSecs;
+            const map = {};
+            for (const e of events) {
+                const key = e.target || '(unknown)';
+                if (!map[key]) map[key] = { name: key, damage: 0, hits: 0 };
+                map[key].damage += e.damage;
+                map[key].hits++;
+            }
+            return Object.values(map).map(r => ({ ...r, dps: r.damage / dur }));
         }
 
         sortRows(rows, col) {
@@ -604,28 +996,42 @@
 
         // ── Render ────────────────────────────────────────────────────────────
         render() {
-            const evts = this.getWindowEvents();
-            const player = this.playerName;
+            this.checkFightTimeout();
 
-            const yourEvts  = player ? evts.filter(e => e.source === player) : [];
-            // Other DPS: sources hitting the same targets the player has hit in this window.
-            // This works regardless of whether names contain '#' or not.
-            const playerTargets = new Set(yourEvts.map(e => e.target));
-            const groupEvts = player
-                ? evts.filter(e => e.source !== player && playerTargets.has(e.target))
+            const evts     = this.getDisplayEvents();
+            const duration = this.getDisplayDuration();
+            const player   = this.playerName;
+
+            // Your outgoing: direct (you are source) + indirect to non-player targets
+            // Indirect dmg has source='(Indirect)', target=who suffered — if target≠player, credit it as yours
+            const yourEvts = player
+                ? evts.filter(e => e.source === player || (e.source === '(Indirect)' && e.target !== player))
                 : [];
-            const incEvts   = player ? evts.filter(e => e.target === player) : [];
+            const incEvts  = player
+                ? evts.filter(e => e.target === player && e.source !== player)
+                : [];
 
-            const yourAbilities = this.aggregateByAbility(yourEvts);
-            const groupSources  = this.aggregateBySource(groupEvts);
-            const incSources    = this.aggregateBySource(incEvts);
+            const yourAbilities = this.aggregateByAbility(yourEvts, duration);
+            const targetRows    = this.aggregateByTarget(yourEvts.filter(e => e.source === player), duration);
+            const incSources    = this.aggregateBySource(incEvts, duration);
 
-            const yourTotal  = yourAbilities.reduce((s, r) => s + r.damage, 0);
-            const incTotal   = incEvts.reduce((s, e) => s + e.damage, 0);
-            const groupTotal = groupEvts.reduce((s, e) => s + e.damage, 0);
+            const yourTotal = yourAbilities.reduce((s, r) => s + r.damage, 0);
+            const incTotal  = incEvts.reduce((s, e) => s + e.damage, 0);
 
-            const yourDps = yourTotal / this.windowSecs;
-            const incDps  = incTotal  / this.windowSecs;
+            const yourDps = yourTotal / duration;
+            const incDps  = incTotal  / duration;
+
+            // Viewing label + dim window control when viewing a fight
+            const isLive = this.selectedFightId === null;
+            document.getElementById('windowControlRow').style.opacity = isLive ? '' : '0.35';
+            if (!isLive) {
+                const fight = this.fights.find(f => f.id === this.selectedFightId);
+                const visibleFights = this.getVisibleFights();
+                const fightNum = visibleFights.indexOf(fight) + 1;
+                document.getElementById('sumViewing').textContent = `Fight ${fightNum} (${this.fmtDur(Math.round(duration))})`;
+            } else {
+                document.getElementById('sumViewing').textContent = `LIVE (${this.windowSecs}s)`;
+            }
 
             // Summary bar
             document.getElementById('sumYourDps').textContent  = this.fmtDps(yourDps);
@@ -635,40 +1041,19 @@
             document.getElementById('sumEvents').textContent   = this.totalParsed;
             document.getElementById('sumUnmatched').textContent = this.unmatchedCount;
             document.getElementById('yourTotalDps').textContent  = this.fmtDps(yourDps);
-            document.getElementById('groupTotalDps').textContent = this.fmtDps(groupTotal / this.windowSecs);
+            document.getElementById('targetTotalDps').textContent = this.fmtDps(yourDps);
             document.getElementById('incTotalDps').textContent   = this.fmtDps(incDps);
+
+            this._lastEvts = evts; // stash for expand callbacks
 
             // Your abilities table
             this.renderAbilityTable('yourDpsBody', this.sortRows(yourAbilities, this.sortState.your), yourTotal, 'out');
 
-            // Group DPS table
-            const sortedGroup = this.sortRows(groupSources, this.sortState.group);
-            const maxGroupDps = sortedGroup[0]?.dps || 1;
-            const tbody = document.getElementById('groupDpsBody');
-            tbody.innerHTML = '';
-            if (!sortedGroup.length) {
-                tbody.innerHTML = '<tr><td colspan="5" class="empty-panel">No others hitting your targets in window</td></tr>';
-            } else {
-                for (const row of sortedGroup) {
-                    const pct      = row.dps / maxGroupDps;
-                    const expanded = this.expandedRows.group.has(row.name);
-                    const tr = document.createElement('tr');
-                    tr.className = 'player-row';
-                    tr.innerHTML = `
-                        <td class="name-cell name-out player-name" onclick="tracker.toggleExpand(this, '${this.esc(row.name)}', 'group')">
-                            <span class="expand-icon">${expanded ? '▼' : '▶'}</span>${this.esc(row.name)}
-                        </td>
-                        <td class="dps-val">${this.fmtDps(row.dps)}</td>
-                        <td class="dmg-val">${this.fmt(row.damage)}</td>
-                        <td class="hits-val">${row.hits}</td>
-                        <td class="bar-cell"><div class="bar-bg"><div class="bar-fill bar-out" style="width:${Math.round(pct*100)}%"></div></div></td>`;
-                    tbody.appendChild(tr);
-                    if (expanded) this._insertAbilityRows(tr, row.name, 'group', evts);
-                }
-            }
+            // Damage by target table
+            this.renderTargetTable(this.sortRows(targetRows, this.sortState.target), yourTotal, duration);
 
             // Incoming sources table
-            this.renderSourceTable('incSourceBody', this.sortRows(incSources, this.sortState.incSrc), incTotal, 'in', evts);
+            this.renderSourceTable('incSourceBody', this.sortRows(incSources, this.sortState.incSrc), incTotal, 'in', evts, duration);
 
             // Recent hits
             const recent = [...incEvts].sort((a,b) => b.time - a.time).slice(0, 40);
@@ -716,7 +1101,34 @@
             }
         }
 
-        renderSourceTable(tbodyId, rows, total, barClass, evts) {
+        renderTargetTable(rows, total, duration) {
+            const tbody = document.getElementById('targetDpsBody');
+            tbody.innerHTML = '';
+            if (!rows.length) {
+                tbody.innerHTML = `<tr><td colspan="6" class="empty-panel">${this.playerName ? 'No outgoing damage' : 'Set your character name above'}</td></tr>`;
+                return;
+            }
+            const maxDps = rows[0]?.dps || 1;
+            for (const row of rows) {
+                const pct      = row.dps / maxDps;
+                const expanded = this.expandedRows.target.has(row.name);
+                const tr = document.createElement('tr');
+                tr.className = 'player-row';
+                tr.innerHTML = `
+                    <td class="name-cell name-out player-name" onclick="tracker.toggleExpand(this, '${this.esc(row.name)}', 'target')">
+                        <span class="expand-icon">${expanded ? '▼' : '▶'}</span>${this.esc(row.name)}
+                    </td>
+                    <td class="dps-val">${this.fmtDps(row.dps)}</td>
+                    <td class="dmg-val">${this.fmt(row.damage)}</td>
+                    <td class="hits-val">${row.hits}</td>
+                    <td class="pct-val">${total > 0 ? Math.round(row.damage / total * 100) : 0}%</td>
+                    <td class="bar-cell"><div class="bar-bg"><div class="bar-fill bar-out" style="width:${Math.round(pct*100)}%"></div></div></td>`;
+                tbody.appendChild(tr);
+                if (expanded) this._insertAbilityRows(tr, row.name, 'target', this._lastEvts, duration);
+            }
+        }
+
+        renderSourceTable(tbodyId, rows, total, barClass, evts, duration) {
             const tbody = document.getElementById(tbodyId);
             tbody.innerHTML = '';
             if (!rows.length) {
@@ -738,7 +1150,7 @@
                     <td class="hits-val">${row.hits}</td>
                     <td class="bar-cell"><div class="bar-bg"><div class="bar-fill bar-${barClass}" style="width:${Math.round(pct*100)}%"></div></div></td>`;
                 tbody.appendChild(tr);
-                if (expanded) this._insertAbilityRows(tr, row.name, 'incSrc', evts);
+                if (expanded) this._insertAbilityRows(tr, row.name, 'incSrc', evts, duration);
             }
         }
 
@@ -748,14 +1160,14 @@
             this.render();
         }
 
-        _insertAbilityRows(afterTr, name, context, evts) {
+        _insertAbilityRows(afterTr, name, context, evts, duration) {
             let sourceEvts;
-            if (context === 'group') {
-                sourceEvts = evts.filter(e => e.source === name);
+            if (context === 'target') {
+                sourceEvts = (evts || []).filter(e => e.target === name && e.source === this.playerName);
             } else {
-                sourceEvts = evts.filter(e => e.source === name && e.target === this.playerName);
+                sourceEvts = (evts || []).filter(e => e.source === name && e.target === this.playerName);
             }
-            const abilities = this.sortRows(this.aggregateByAbility(sourceEvts), 'dps');
+            const abilities = this.sortRows(this.aggregateByAbility(sourceEvts, duration), 'dps');
             const totalDmg  = sourceEvts.reduce((s,e) => s+e.damage, 0);
             let ref = afterTr;
             for (const ab of abilities) {
@@ -776,7 +1188,20 @@
         renderRaw() {
             const el = document.getElementById('rawLog');
             el.innerHTML = '';
-            const lines = [...this.rawLines].reverse();
+            let lines;
+            if (this.selectedFightId !== null) {
+                // Show raw lines from the selected fight's events (all matched, sorted oldest first)
+                const fight = this.fights.find(f => f.id === this.selectedFightId);
+                lines = fight ? fight.events.map(e => e.raw).filter(Boolean) : [];
+                // already in chronological order — reverse for newest-first display
+                lines = [...lines].reverse();
+            } else {
+                lines = [...this.rawLines].reverse();
+            }
+            if (!lines.length) {
+                el.innerHTML = '<div style="color:#555;padding:12px">No raw lines for this fight.</div>';
+                return;
+            }
             for (const line of lines) {
                 const ev  = parseCombatLine(line);
                 const div = document.createElement('div');
@@ -812,8 +1237,8 @@
                 } catch { /* permission lost */ }
             }
 
-            // Refresh render every 2s to update DPS numbers even without new lines
-            setInterval(() => this.render(), 2000);
+            // Refresh render every 2s to update DPS numbers and fight bar even without new lines
+            setInterval(() => { this.render(); this.renderFightBar(); }, 2000);
         }
     }
 

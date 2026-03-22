@@ -549,6 +549,145 @@ header p {
     transition: max-height 0.6s ease-in;
 }
 
+/* ── Ready for Turn-In section ──────────────────────────── */
+.turnin-section {
+    margin-bottom: 20px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    overflow: clip;
+}
+
+.turnin-header {
+    padding: 15px 20px;
+    background: linear-gradient(135deg, #0077cc 0%, #00aacc 100%);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: white;
+    font-weight: 700;
+    font-size: 1em;
+    user-select: none;
+    transition: background 0.2s;
+}
+.turnin-header:hover {
+    background: linear-gradient(135deg, #0066b3 0%, #0099b3 100%);
+}
+.turnin-header.active {
+    background: linear-gradient(135deg, #005599 0%, #0088a0 100%);
+}
+
+.turnin-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.turnin-header .quest-count-badge {
+    background: rgba(255,255,255,0.3);
+    color: white;
+}
+
+.turnin-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out;
+}
+.turnin-content.active {
+    max-height: 20000px;
+    transition: max-height 0.6s ease-in;
+}
+
+.turnin-area-group {
+    padding: 10px 16px 4px;
+}
+.turnin-area-group + .turnin-area-group {
+    border-top: 1px solid #d4e0f5;
+}
+.turnin-area-header {
+    font-size: 0.78em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #0077cc;
+    margin-bottom: 8px;
+}
+
+.turnin-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.turnin-quest-card {
+    background: #f4f8ff;
+    border: 1px solid #d4e0f5;
+    border-radius: 8px;
+    padding: 12px 14px;
+}
+
+.turnin-quest-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.turnin-items {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.turnin-item {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 0.88em;
+}
+
+.turnin-item-icon {
+    width: 18px;
+    height: 18px;
+    image-rendering: pixelated;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+.turnin-item-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+    min-width: 0;
+}
+
+.turnin-item-needed {
+    color: #6c757d;
+    font-weight: 400;
+}
+
+.turnin-item-locs {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+}
+
+.turnin-split-note {
+    font-size: 0.78em;
+    color: #856404;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 10px;
+    padding: 1px 7px;
+}
+
 .quick-objectives-section {
     margin-bottom: 20px;
     background: white;
@@ -1144,6 +1283,90 @@ header p {
     transition: background 0.15s;
 }
 .favor-items-btn:hover { background: #5a6fd6; }
+
+/* Clickable stat card for actions */
+.quest-stats .stat-card-action {
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+    opacity: 0.55;
+}
+.quest-stats .stat-card-action:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    opacity: 0.8;
+}
+.quest-stats .stat-card-action--has-dupes {
+    opacity: 1;
+}
+.quest-stats .stat-card-action--has-dupes:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(102,78,162,0.45);
+}
+
+/* Duplicate items modal */
+.duplicate-items-modal {
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+    width: 560px;
+    max-width: 92vw;
+    max-height: 82vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.duplicate-items-modal-body {
+    overflow-y: auto;
+    flex: 1;
+    padding: 8px 0;
+}
+.dup-summary {
+    padding: 8px 16px 4px;
+    font-size: 0.82em;
+    color: #6c757d;
+    border-bottom: 1px solid #e9ecef;
+    margin-bottom: 4px;
+}
+.dup-item-row {
+    padding: 8px 16px;
+    border-bottom: 1px solid #f0f0f0;
+}
+.dup-item-row:last-child { border-bottom: none; }
+.dup-item-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 0.92em;
+    margin-bottom: 5px;
+}
+.dup-item-icon {
+    width: 24px;
+    height: 24px;
+    image-rendering: pixelated;
+    flex-shrink: 0;
+}
+.dup-vaults {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding-left: 32px;
+}
+.dup-vault-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 8px;
+    background: #f0f4ff;
+    border: 1px solid #c9d4f5;
+    border-radius: 12px;
+    font-size: 0.8em;
+    color: #4a5590;
+}
+.dup-qty {
+    color: #888;
+    font-size: 0.9em;
+}
 
 /* Favor items modal */
 .favor-items-modal {
@@ -3460,6 +3683,42 @@ html[data-theme="dark"] .accordion-quests {
     background: #1a1a2a;
 }
 
+/* Ready for turn-in section */
+html[data-theme="dark"] .turnin-section {
+    background: #252540;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+html[data-theme="dark"] .turnin-header {
+    background: linear-gradient(135deg, #0055aa 0%, #0088aa 100%);
+}
+html[data-theme="dark"] .turnin-header:hover {
+    background: linear-gradient(135deg, #0066cc 0%, #009acc 100%);
+}
+html[data-theme="dark"] .turnin-header.active {
+    background: linear-gradient(135deg, #004488 0%, #007799 100%);
+}
+html[data-theme="dark"] .turnin-quest-card {
+    background: #1a1e38;
+    border-color: #2a2e58;
+}
+html[data-theme="dark"] .turnin-item-name {
+    color: #c0c0e0;
+}
+html[data-theme="dark"] .turnin-item-needed {
+    color: #8888aa;
+}
+html[data-theme="dark"] .turnin-area-group + .turnin-area-group {
+    border-color: #2a2e58;
+}
+html[data-theme="dark"] .turnin-area-header {
+    color: #5599dd;
+}
+html[data-theme="dark"] .turnin-split-note {
+    background: #3a2e00;
+    border-color: #a08000;
+    color: #d4aa00;
+}
+
 /* Quick objectives */
 html[data-theme="dark"] .quick-objectives-section {
     background: #252540;
@@ -3769,10 +4028,11 @@ html[data-theme="dark"] .tracker-btn.tracker-active {
     color: white;
 }
 
-/* Tracker / price / favor modals */
+/* Tracker / price / favor / duplicate modals */
 html[data-theme="dark"] .tracker-modal,
 html[data-theme="dark"] .price-modal,
-html[data-theme="dark"] .favor-items-modal {
+html[data-theme="dark"] .favor-items-modal,
+html[data-theme="dark"] .duplicate-items-modal {
     background: #1e1e2e;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
 }
@@ -3818,6 +4078,26 @@ html[data-theme="dark"] .price-modal-label {
 
 html[data-theme="dark"] .tracker-modal-overlay {
     background: rgba(0, 0, 0, 0.6);
+}
+
+/* Duplicate items modal — dark mode */
+html[data-theme="dark"] .dup-summary {
+    color: #8888aa;
+    border-bottom-color: #3a3a5a;
+}
+html[data-theme="dark"] .dup-item-row {
+    border-bottom-color: #2a2a40;
+}
+html[data-theme="dark"] .dup-item-name {
+    color: #c0c0e0;
+}
+html[data-theme="dark"] .dup-vault-chip {
+    background: #1e2040;
+    border-color: #3a3a6a;
+    color: #9090cc;
+}
+html[data-theme="dark"] .dup-qty {
+    color: #6666aa;
 }
 
 /* Favor items modal */
