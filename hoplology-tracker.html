@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hoplology Tracker</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface2: #21262d;
+  --border: #30363d;
+  --accent: #58a6ff;
+  --accent-dim: #1f3a5c;
+  --green: #3fb950;
+  --green-dim: #1a3a22;
+  --text: #c9d1d9;
+  --text-dim: #6e7681;
+  --red: #f85149;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; }
+
+/* ── Header ── */
+.header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.header h1 { font-size: 1rem; font-weight: 600; color: var(--accent); flex-shrink: 0; letter-spacing: .02em; }
+.inv-meta { font-size: 0.75rem; color: var(--text-dim); flex-shrink: 0; }
+.search-wrap { flex: 1; min-width: 180px; position: relative; }
+.search-wrap input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 5px 10px 5px 30px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+.search-wrap input:focus { outline: none; border-color: var(--accent); }
+.search-wrap::before { content: '🔍'; position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font-size: 0.75rem; pointer-events: none; }
+.load-btn {
+  background: var(--surface2);
+  color: var(--accent);
+  border: 1px solid var(--border);
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  transition: background .15s;
+}
+.load-btn:hover { background: var(--accent-dim); border-color: var(--accent); }
+.log-btn {
+  background: var(--surface2);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.log-btn:hover { color: var(--text); border-color: var(--text-dim); }
+.log-btn.watching { color: var(--green); border-color: var(--green); background: var(--green-dim); }
+.timer-display {
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+  display: none;
+}
+.timer-display.active { display: block; color: var(--green); border-color: var(--green); }
+.timer-display.urgent { color: var(--red); border-color: var(--red); animation: blink .7s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
+#file-input { display: none; }
+
+/* ── Toast ── */
+#toast-container { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 100; pointer-events: none; }
+.toast {
+  background: var(--surface2);
+  border: 1px solid var(--green);
+  color: var(--text);
+  padding: 9px 14px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,.5);
+  opacity: 0;
+  transform: translateY(8px);
+  animation: toast-in .2s ease forwards, toast-out .3s ease 2.7s forwards;
+  pointer-events: none;
+}
+.toast strong { color: var(--green); }
+@keyframes toast-in  { to { opacity:1; transform:translateY(0); } }
+@keyframes toast-out { to { opacity:0; transform:translateY(8px); } }
+
+/* ── Tab bar ── */
+.tabs {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 8px;
+  display: flex;
+  overflow-x: auto;
+  gap: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.tab {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  transition: color .15s;
+  user-select: none;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  background: var(--surface2);
+  padding: 1px 5px;
+  border-radius: 10px;
+  margin-left: 4px;
+  color: var(--text-dim);
+}
+.tab.active .badge { background: var(--accent-dim); color: var(--accent); }
+.tab.has-progress .badge { background: var(--green-dim); color: var(--green); }
+.tab.active.has-progress .badge { background: var(--green-dim); color: var(--green); }
+
+/* ── Content ── */
+.content { padding: 14px 16px; max-width: 1100px; }
+.cat-header {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cat-header strong { color: var(--text); font-size: 0.95rem; }
+.cat-stats { color: var(--text-dim); }
+
+/* ── Item list ── */
+.item-list { display: flex; flex-direction: column; gap: 2px; }
+.item-row {
+  background: var(--surface);
+  display: grid;
+  grid-template-columns: 20px 32px 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  transition: background .1s;
+}
+.item-row:hover { background: var(--surface2); border-color: var(--border); }
+.item-row.is-studied { opacity: 0.55; }
+.item-checkbox { cursor: pointer; accent-color: var(--green); width: 14px; height: 14px; flex-shrink: 0; }
+.item-icon { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; image-rendering: pixelated; }
+.item-icon-ph { width: 32px; height: 32px; flex-shrink: 0; }
+.item-name { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item-row.is-studied .item-name { text-decoration: line-through; color: var(--text-dim); }
+.badge-inv {
+  font-size: 0.65rem;
+  background: var(--green-dim);
+  color: var(--green);
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-loc { font-size: 0.7rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+
+/* ── Summary ── */
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; }
+.summary-card h3 { font-size: 0.85rem; color: var(--accent); margin-bottom: 8px; }
+.prog-bar { height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; margin-bottom: 5px; }
+.prog-bar .fill { height: 100%; background: var(--green); border-radius: 3px; transition: width .3s; }
+.summary-nums { font-size: 0.72rem; color: var(--text-dim); display: flex; gap: 10px; }
+.summary-nums span { color: var(--text); }
+
+/* ── Search label ── */
+.search-cat-label {
+  font-size: 0.68rem;
+  color: var(--accent);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin: 10px 0 4px;
+}
+.search-cat-label:first-child { margin-top: 0; }
+
+/* ── Empty / loading ── */
+.empty { color: var(--text-dim); font-size: 0.85rem; padding: 32px; text-align: center; }
+.loading { color: var(--text-dim); font-size: 0.85rem; padding: 32px; text-align: center; }
+.loading::after { content: ''; animation: dots 1.2s infinite; }
+@keyframes dots { 0%{content:''} 33%{content:'.'} 66%{content:'..'} 100%{content:'...'} }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>⚔ Hoplology Tracker</h1>
+  <span class="inv-meta" id="inv-meta">No inventory loaded</span>
+  <div class="search-wrap">
+    <input type="text" id="search-input" placeholder="Search all items…" oninput="onSearch(this.value)">
+  </div>
+  <button class="load-btn" id="reports-btn" onclick="startReportsWatch()">📂 Watch Reports Folder</button>
+  <button class="log-btn" id="skill-report-btn" onclick="loadSkillReport()">📖 Load Skill Report</button>
+  <button class="log-btn" id="log-btn" onclick="toggleLogWatch()">👁 Watch Log</button>
+  <div class="timer-display" id="timer-display">⏱ 5:00</div>
+</div>
+
+<div class="tabs" id="tab-bar"></div>
+<div id="toast-container"></div>
+
+<div class="content" id="main-content">
+  <div class="loading" id="loading-msg">Fetching items data from CDN</div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// STATIC CATEGORY DATA  (Project Gorgon Hoplology — all weapons)
+// ═══════════════════════════════════════════════════════════════
+const STATIC_CATEGORIES = {
+  Swords: [
+    '"Povus Special" Longsword','Acid-Addled Blade','Admin Sword','Aktaari Cutlass',
+    'Amazing Military Sword','Ancient Dwarven Blade','Antique Spatha','Astounding Military Sword',
+    'Awesome Military Sword','Basic Sword','Battle-Hardened Sword','Bedazzled Spatha',
+    "Bendith's Blade",'Blackened Sword','Blocking Blade','Chopping Sword',
+    'Council Trooper Sword',"Dragon's Strike",'Elven Ceremonial Longsword','Elven Longsword',
+    "Extra-Fancy Shellmaster's Blade",'Fae Rapier',"Fancy Shellmaster's Blade",'Fiendish Rapier',
+    'Flaming Gazluk Sword','Goblin Cutlass','Goblinblade','Gouging Stiletto',
+    'Great Military Sword','Hobgoblin Peacemaster Sword',"James Eltibule's Sword",
+    "Janet Lew's Old Longsword","Joeh's Old Sword","Jott's Blazing Star Sword",
+    "Lord ErDrick's Blade","Lordling's Spatha",'Mankiller Sword','Moldy Ancient Sword',
+    "Murdebok's Blade",'Naturebane','Orcish Broadsword','Orcish Spatha','Pig Sticker',
+    "Prognek's Flaming Sword",'Quality Military Sword','Quality Sword',
+    'Ratkin Revolutionist Sword','Rusty Sword',"Sedgewick's Honor","Shellmaster's Blade",
+    'Silvered Sword','Simple Silver Knife','Sturdy Sword',"Tabor's Blade of Supremacy",
+    "Torgan's Spatha","Vanquisher's Blade",'Wolfbite','Xiphos'
+  ],
+  Shields: [
+    '"Povus Special" Shield','Acid-Pitted Shield','Admin Shield','Basic Shield',
+    'Battle-Hardened Shield','Cheap Goblin Shield','Defender of the Frail',
+    "Dream-Keeper's Shield",'Dwarven Targe','Elven Ceremonial Shield','Elven Shield',
+    'Extra-Fancy Shield of the Sea','Fae Navy Shield','Fancy Shield of the Sea',
+    'Finesse Targe','Gazluk Trooper Shield','Goblin Shield','Hobgoblin Shield',
+    'Hypnotic Shield',"Leader's Shield","Marna's Lucky Shield",'Moldy Ancient Shield',
+    "Nameless Guardian's Shield","Nelson Ballard's Shield",'Oaken Shield',
+    "Old Crusty's Backside",'Orcish Military Shield','Orcish Targe','Peltast Shield',
+    'Quality Shield','Ratkin Revolutionist Shield','Ravana Soldier Shield',
+    'Shield of the Sea','Simple Ice Shield','Snail Shield','Snowblood Misery Trooper Shield',
+    'Stalwart Targe','Sturdy Shield','Thentree Shield','Thick Ice Shield',"Torgan's Shield",
+    "Tyler's Second-Favorite Shield","Tyler's Shield",'Umrad Shield',
+    "Valore's Shield of Darkness",'Winter Shield','Yeti Shield'
+  ],
+  Bows: [
+    '"Povus Special" Bow','Amazing Hunting Bow','Astounding Hunting Bow','Awesome Faebow',
+    'Awesome Hunting Bow','Basic Bow',"Black Agatha's Bull's-eye Bow",'Blackened Bow',
+    'Bow of Range','Cheap Goblinized Bow','Dwarven Bashbow','Eltibule Bow',
+    'Elven Master Bow','Faebow','Fairy Bow','Fangblade Jr.','Far Biter','Fastbow',
+    "Floxie's Faebow",'Goblinic Piercer','Goblinized Bow','Great Hunting Bow',
+    'Hunting Bow',"Lawara's Bow","Malgath's Demo Bow",'Old Worn Bow','Orcish Military Bow',
+    'Overgoblinized Bow','Peltast Bow','Prescient Bow','Quality Bow','Quality Hunting Bow',
+    'Replica Rakshasa Bow','Shockbow','Stalwart Bow','Stock Bow',
+    "Tamoko's Bow of Compassion",'Thentree Bow',"Tremor's Bow","Tremor's Enhanced Bow",
+    'Ultragoblinized Bow','Un-Tal Bow'
+  ],
+  Crossbows: [
+    '"Povus Special" Crossbow','Amazing Hunting Crossbow','Astounding Hunting Crossbow',
+    'Awesome Hunting Crossbow','Black Rose','Crossbow of Flames','Cutting Crossbow',
+    'Dark Crossbow','Darkcaster','Demonic Crossbow','Double Crossbow',
+    'Great Hunting Crossbow',"Hunter's Crossbow",'Hunting Crossbow','Practice Crossbow',
+    'Quality Hunting Crossbow','Speed Crossbow','Spring-Loaded Crossbow','Stock Crossbow'
+  ],
+  Hammers: [
+    '"Povus Special" Hammer','Accelerated Orcish Mining Pick',"Agrashab's Club",'Amazing Club',
+    'Archcudgel',"Asterion's Hammer",'Astounding Club','Awesome Club','Basic Hammer',
+    'Battle Hammer','Bedazzled Hammer','Blasting Hammer',"Chet Thunder's Club",'Crude Club',
+    'Cruel Club','Crushing Club','Decent Club',"Deldaron's Bash Stick",
+    'Devastating Archcudgel','Devastating Hammer','Deworming Club','Dwarven Hammer',
+    'Flame Basher','Great Club',"Gulagra's Club",'Hammer of the Five Truths','Heavy Club',
+    'Mallet of Obliteration','Minotaur Hammer','Minotaur Warhammer',
+    'Misery Trooper Hammer',"Niali's Hammer of Splitting Headaches",'Nice Club',
+    'Old Oak Club','Orcish Mining Pick',"Otis's Gift Club",'Primitive Club',
+    'Productive Club','Quality Club','Ratkin Mining Pick','Rough Club',
+    "Rum's Chuggin' Mug",'Shattering Archcudgel','Shoddy Club','Simplistic Club',
+    'Stalwart Hammer',"The Flower Child's Prodder","Torgan's Hammer",'Vicious Club',
+    'Weighty Club'
+  ],
+  Staves: [
+    '"Povus Special" Staff','Adequate Staff','Amazing Chemistry Staff','Amazing Combat Staff',
+    'Amazing Melee Staff','Amazing Priest Staff',"Ambrosia's Staff of Rudeness",
+    'Astounding Chemistry Staff','Astounding Combat Staff','Astounding Melee Staff',
+    'Astounding Priest Staff','Awesome Chemistry Staff','Awesome Combat Staff',
+    'Awesome Melee Staff','Awesome Priest Staff','Balanced Battlestaff','Basic Staff',
+    'Battle Hardened Staff','Beaker-Stick','Bonfire Summoner','Crude Combat Staff',
+    'Crude Melee Staff','Crude Priest Staff',"Cultist's Blood Staff",'Decent Combat Staff',
+    'Decent Melee Staff','Decent Priest Staff','Druidic Assault Staff',
+    'Druidic Training Stick','Dwarven Medic Staff','Elerimon Staff','Elven Staff',
+    'Extra-Fancy Staff of the Sea','Fancy Staff of the Sea','Fatestick','Freezing Staff',
+    'Fruitless Staff','Fungi Staff','Goblin Staff','Great Chemistry Staff',
+    'Great Combat Staff','Great Melee Staff','Great Priest Staff','Guardian Trident',
+    'Hippogriff Prod',"Hogan's Crippler","Hogan's Flingin' Stick",'Inquisitor\'s Staff',
+    "Jesina's Staff",'Lunging Staff',"Lusssha's Trident",'Moldy Ancient Staff',
+    "Necromancer's Training Staff",'Necromancy Test Staff','Nice Combat Staff',
+    'Nice Melee Staff','Nice Priest Staff',"Orloaka's Staff",'Paleontology Staff',
+    'Quality Chemistry Staff','Quality Combat Staff','Quality Melee Staff',
+    'Quality Priest Staff','Quality Staff','Ranastaff','Ratkin Staff',
+    "Roshun's Heavy Hitter",'Rough Combat Staff','Rough Melee Staff','Rough Priest Staff',
+    'Sacred Guardian Trident','Sandy Staff','Shoddy Combat Staff','Shoddy Melee Staff',
+    'Shoddy Priest Staff','Staff of Ice','Staff Of Leadership','Staff of the Artifex',
+    'Staff of the Paradox','Staff of the Sea','Sturdy Staff','Sun Warden','Swishystick',
+    "Tactician's Halberd",'The Galvanizer',"Torgan's Staff",'Tough Ranastaff',
+    "Trasen's Refined Wand","Trasen's Wand",'Trueoak Staff','Unfun Staff',
+    "Velkort's Hand-Me-Down",'Winged Witch Staff',"Yagreet's Staff"
+  ],
+  Knives: [
+    '"Povus Special" Dagger','Amazing Military Dagger','Amazing Military Dirk',
+    'Astounding Military Dagger','Astounding Military Dirk','Autofreeze Knife',
+    'Autofreeze Shiv','Awesome Military Dagger','Awesome Military Dirk','Backup Dagger',
+    'Basic Dagger','Basic Dirk','Bedazzled Dagger','Bleeder Shiv','Carving Dagger',
+    'Cold-Iron Knife',"Controller's Stiletto",'Corrupted Blade',"Courtesan's Blade",
+    'Dwarven Gouger','Dwarven Maintenance Blade','Elven Dagger','Elven Dirk',
+    "Ex-Courtesan's Blade",'Executrix Blade','Extra-Fancy Ranalon Dagger','Fairy Dagger',
+    'Fairy Dirk','Fancy Ranalon Dagger','Freezing Blade','Goblin Dirk','Goblin Lifekeeper',
+    'Great Military Dagger','Great Military Dirk',"Gut-Ache's Chopper",'Heavy Dirk',
+    'Icesnake',"Karamasha's Fishing Knife",'Lovelorn Blade','Military Khopis',
+    "Mutterer's Blade","Nopec's Dreaded Dagger of Endless Nights",'Quality Dagger',
+    'Quality Dirk','Quality Military Dagger','Quality Military Dirk','Ranalon Dagger',
+    'Ratkin Dagger','Ratkin Dirk','Ravana Soldier Dagger',"Rick's Sticker",'Rusty Dirk',
+    'Rusty Knife',"Ruxandra's Bite",'Safety Dirk',"Scorpion's Revenge",
+    "Sirine's Ivory Blade","Soldier's Pugeo",'Stabmaster','Stalwart Dagger','Sturdy Dagger',
+    'Sturdy Dirk','Timeless Dirk',"Torgan's Stiletto",'Tough Ranalon Dagger','Venomizer'
+  ],
+  Fists: [
+    '"Povus Special" Claw',"Amazing Alchemist's Claw",'Amazing Fighting Claw',
+    "Astounding Alchemist's Claw",'Astounding Fighting Claw',"Awesome Alchemist's Claw",
+    'Awesome Fighting Claw','Basic Brass Knuckles','Basic War Claw','Claw-Barrager',
+    'Corroded Brass Knuckles','Dwarven Pugilfist','Elven Cestus','Fae Claw','Fairy Cestus',
+    'Fist of the Green Man','Frog Punch',"Furlak's Claw",'Glasstone Fist','Goblin Cestus',
+    'Goblin Claw','Golem Fist',"Great Alchemist's Claw",'Great Fighting Claw',
+    "Gue's Remnant",'Hammer Hand',"Mutterer's Katar",'Orcish Katar','Petrified Bone Claw',
+    'Pounding Cestus','Primitive Fighting Claw','Protruding Knuckles',
+    "Quality Alchemist's Claw",'Quality Cestus','Quality Claw','Quality Fighting Claw',
+    'Ratkin Claw','Ratkin Katar','Resistant Claw',"Ridiculer's Claw",'Running Claw',
+    'Sand War Claw','Serpent Sting','Shoddy Brass Knuckles','Shoddy Fighting Claw',
+    'Slicing Katar','Spider Cestus','Stalwart Claw','Sturdy Cestus','Sturdy Claw',
+    "Tamiq's Automated Puncherfist","Torgan's Claw","Torgan's Katar","Torturer's Claw",
+    'Tragic Kitten Claw','Troll Claw','War Golem Fist','Yeti Knuckleduster'
+  ],
+  Orbs: [
+    'Anguish Orb','Blasting Orb','Blazing Orb','Burning Orb','Darkness Orb','Despair Orb',
+    'Fire Orb','Fury Orb','Gulagra Orb','Hate Orb','Heat Orb','Incinerating Orb',
+    'Magma Ball','Melting Orb','Orb of Traumatic Deaths','Regret Orb','Revulsion Orb',
+    'Sadness Orb','Scintillating Orb','Sealing Orb','Suicide Orb','Summer Orb',
+    'Warmth Orb','Winter Orb'
+  ],
+  Flasks: [
+    '"Povus Special" Beaker','Acid Beaker','Acid Flask','Amazing Aerosolizing Bat Harness',
+    "Amazing Alchemist's Claw",'Amazing Arachnid Mechaharness','Amazing Chemistry Staff',
+    'Amazing Porcine Blast Disperser',"Anhinda's Flask",
+    'Astounding Aerosolizing Bat Harness',"Astounding Alchemist's Claw",
+    'Astounding Arachnid Mechaharness','Astounding Chemistry Staff',
+    'Astounding Porcine Blast Disperser','Awesome Aerosolizing Bat Harness',
+    "Awesome Alchemist's Claw",'Awesome Arachnid Mechaharness','Awesome Chemistry Staff',
+    'Basic Combat Beaker','Basic Combat Flask','Beaker of Formless Toxin',
+    'Beaker of Xegatis','Beaker-Stick','Bedazzled Beaker','Bombing Beaker',
+    "Builder's Flask",'Chugging Beaker','Chugging Flask','Crimson Flask',
+    'Dwarf-Inspired Beaker','Dwarven Brewer Flask','Fish Beaker','Flask of Chills',
+    "Fluke's Frozen Beaker","Galdyr's Tasty Energy Flask",
+    'Great Aerosolizing Bat Harness',"Great Alchemist's Claw",
+    'Great Arachnid Mechaharness','Great Chemistry Staff','Great Porcine Blast Disperser',
+    "Hogan's Flingin' Stick",'Jar of Explosions','Lopsided Flask','Maiming Beaker',
+    'Multipurpose Beaker','Nice Porcine Blast Disperser',
+    "Quality Aerosolizing Bat Harness","Quality Alchemist's Claw",
+    'Quality Arachnid Mechaharness','Quality Chemistry Staff',
+    'Quality Porcine Blast Disperser',"Rathla's Flask",'Recuperative Beaker',
+    'Recuperative Flask','Serpent Flask','Spillproof Flask','Splash Beaker','Splash Flask',
+    'Staff of the Paradox',"Tamoko's Beaker","Tolmar's Beaker",'Tricky Sage Beaker',
+    'War Flask',"Wynn's Woeful Spider Barding of Regenerative Warding"
+  ],
+  Instruments: [
+    '"Povus Special" Horn','"Povus Special" Lute','Amazing Musical Conch',
+    'Astounding Musical Conch','Awesome Musical Conch','Basic Bard Horn','Basic Bard Lute',
+    'Blast Horn','Blatterhorn','Blowing Horn','Classic Lute','Conch of the Thirtieth Land',
+    'Daisy (Lute)','Death Lur','Decent Musical Conch','Destiny Horn','Doomlute',
+    'Echo Horn','Everhorn',"Faie's Fickle Fife",'Fairy Chimes','Fairy Lute','Fog Horn',
+    'Gemshorn','Goblin Lute','Great Musical Conch',"Grelp's Grandiose Lute",'Hand Drum',
+    'Harp','Infallible Conch','Jolly Lute',"Leader's Conch","Leader's Lute",
+    'Mini-Dulcimer','Moldy Trancelute','Nice Musical Conch','Oakhorn','Quality Bard Lute',
+    'Quality Conch','Quality Musical Conch','Quality Ocarina','Rakshasa Lute',
+    'Refurbished Doomlute','Starlute','Stickhorn','Stonebugle','Sturdy Bard Lute',
+    'The Blasting Ultimator','Trancelute','War Ocarina','War Shofar',"Weaver's Ocarina",
+    'Withering Lute'
+  ]
+};
+
+// Build name → category reverse map
+const NAME_TO_CATEGORY = {};
+for (const [cat, names] of Object.entries(STATIC_CATEGORIES)) {
+  for (const name of names) NAME_TO_CATEGORY[name] = cat;
+}
+
+// EquipSlot field (items.json) → display category name
+const EQUIP_SLOT_TO_CAT = {
+  'Head':     'Head',
+  'Chest':    'Chest',
+  'Hands':    'Hands',
+  'Legs':     'Legs',
+  'Feet':     'Feet',
+  'Ring':     'Rings',
+  'Necklace': 'Amulets',
+  'Neck':     'Amulets',
+  'Waist':    'Belts',
+  'Belt':     'Belts',
+  'Finger':   'Rings',
+};
+
+const STATIC_CAT_ORDER  = ['Swords','Shields','Bows','Crossbows','Hammers','Staves','Knives','Fists','Orbs','Flasks','Instruments'];
+const DERIVED_CAT_ORDER = ['Rings','Amulets','Belts','Head','Chest','Hands','Legs','Feet'];
+const ALL_TABS          = ['Summary', 'To Study', ...STATIC_CAT_ORDER, ...DERIVED_CAT_ORDER];
+
+// Populated after items.json loads — same shape as STATIC_CATEGORIES
+let DERIVED_CATEGORIES = {}; // category → sorted name[]
+
+function buildDerivedCategories(iJson) {
+  const buckets = {};
+  for (const item of Object.values(iJson)) {
+    if (!item.EquipSlot || !item.Name) continue;
+    const cat = EQUIP_SLOT_TO_CAT[item.EquipSlot];
+    if (!cat) continue;
+    if (!buckets[cat]) buckets[cat] = new Set();
+    buckets[cat].add(item.Name);
+  }
+  const result = {};
+  for (const [cat, names] of Object.entries(buckets)) {
+    result[cat] = [...names].sort((a, b) => a.localeCompare(b));
+  }
+  return result;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let itemsJson      = null;   // CDN data keyed by "item_N"
+let fileVersion    = null;   // from client.projectgorgon.com/fileversion.txt
+let NAME_TO_ICON   = {};     // item name → IconId
+let inventoryMap   = {};     // category → [ {name, locations:{vault:count}} ]
+let onPersonSet    = new Set(); // base names currently in character inventory (no StorageVault)
+let studied        = {};     // name → true
+let inventoryMeta  = null;
+let activeTab      = 'Summary';
+let searchQuery    = '';
+
+// Log watcher state
+let logHandle          = null;   // FileSystemFileHandle
+let logLastSize        = 0;
+let logPollId          = null;   // setInterval id
+let timerEndAt         = 0;      // Date.now() ms when timer expires
+let timerTickId        = null;   // setInterval id
+
+// Reports folder watcher state
+let reportsDirHandle   = null;   // FileSystemDirectoryHandle
+let reportsLastFile    = '';     // filename of last loaded inventory
+let reportsPollId      = null;   // setInterval id
+
+const TIMER_DURATION = 5 * 60; // 5 minutes
+const LOG_POLL_MS    = 2000;
+const HOPLO_RE       = /ProcessUpdateSkill\(\{type=Hoplology[^}]*\}/;
+const STUDIED_RE     = /ProcessScreenText\(CraftingNotice, "(.+?) carefully studied!"\)/;
+
+// Sorted (longest first) list of all known hoplology item names — built lazily after items.json loads
+let knownNamesSorted = null;
+
+function getKnownNamesSorted() {
+  if (knownNamesSorted) return knownNamesSorted;
+  const all = new Set();
+  for (const names of Object.values(STATIC_CATEGORIES)) for (const n of names) all.add(n);
+  for (const names of Object.values(DERIVED_CATEGORIES)) for (const n of names) all.add(n);
+  knownNamesSorted = [...all].sort((a, b) => b.length - a.length); // longest first
+  return knownNamesSorted;
+}
+
+// Given a full crafted item name like "Gondeem Helm of Druiding",
+// find the longest known base item name that appears as a substring.
+function showToast(baseName) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `✓ Studied: <strong>${escHtml(baseName)}</strong>`;
+  const container = document.getElementById('toast-container');
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+
+function findBaseItemName(loggedName) {
+  const lower = loggedName.toLowerCase();
+  for (const name of getKnownNamesSorted()) {
+    if (lower.includes(name.toLowerCase())) return name;
+  }
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PERSISTENCE
+// ═══════════════════════════════════════════════════════════════
+const LS = {
+  studied:  'pg_studied',
+  invRaw:   'pg_inventory',
+  invMeta:  'pg_inventory_meta',
+  items:    'pg_items_cache',
+};
+
+// ── IndexedDB for FileSystemHandle persistence ──
+function openHandleDB() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('hoplology_handles', 1);
+    r.onupgradeneeded = e => e.target.result.createObjectStore('handles');
+    r.onsuccess = e => res(e.target.result);
+    r.onerror   = () => rej(r.error);
+  });
+}
+async function saveHandle(key, handle) {
+  try {
+    const db = await openHandleDB();
+    const tx = db.transaction('handles', 'readwrite');
+    tx.objectStore('handles').put(handle, key);
+    await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+  } catch(e) { console.warn('saveHandle failed', e); }
+}
+async function loadHandle(key) {
+  try {
+    const db = await openHandleDB();
+    return await new Promise((res, rej) => {
+      const tx  = db.transaction('handles', 'readonly');
+      const req = tx.objectStore('handles').get(key);
+      req.onsuccess = () => res(req.result || null);
+      req.onerror   = () => rej(req.error);
+    });
+  } catch { return null; }
+}
+async function clearHandle(key) {
+  try {
+    const db = await openHandleDB();
+    const tx = db.transaction('handles', 'readwrite');
+    tx.objectStore('handles').delete(key);
+  } catch {}
+}
+
+function saveStudied()   { localStorage.setItem(LS.studied, JSON.stringify(studied)); }
+function loadStudied()   { try { studied = JSON.parse(localStorage.getItem(LS.studied) || '{}'); } catch { studied = {}; } }
+function saveMeta(m)     { localStorage.setItem(LS.invMeta, JSON.stringify(m)); }
+function loadMeta()      { try { return JSON.parse(localStorage.getItem(LS.invMeta)); } catch { return null; } }
+function saveInvRaw(raw) { try { localStorage.setItem(LS.invRaw, JSON.stringify(raw)); } catch(e) { console.warn('inv cache failed', e); } }
+function loadInvRaw()    { try { const r = localStorage.getItem(LS.invRaw); return r ? JSON.parse(r) : null; } catch { return null; } }
+function saveItemsCache(d){ try { sessionStorage.setItem(LS.items, JSON.stringify(d)); } catch(e) { console.warn('items cache skipped (quota)', e); } }
+function loadItemsCache() { try { const r = sessionStorage.getItem(LS.items); return r ? JSON.parse(r) : null; } catch { return null; } }
+
+// ═══════════════════════════════════════════════════════════════
+// ITEMS.JSON
+// ═══════════════════════════════════════════════════════════════
+async function fetchFileVersion() {
+  // client.projectgorgon.com blocks CORS from file:// origins.
+  // Try the CDN instead (same CORS policy as items.json), then fall back
+  // to the last known-good version stored in localStorage, then hardcoded.
+  try {
+    const resp = await fetch('https://cdn.projectgorgon.com/fileversion.txt');
+    if (resp.ok) {
+      const ver = (await resp.text()).trim();
+      if (/^[a-zA-Z0-9]+$/.test(ver)) {
+        localStorage.setItem('pg_fileversion', ver);
+        return ver;
+      }
+    }
+  } catch {}
+  return localStorage.getItem('pg_fileversion') || '466';
+}
+
+async function fetchItemsJson() {
+  const cached = loadItemsCache();
+  if (cached) return cached;
+  const resp = await fetch(`https://cdn.projectgorgon.com/v${fileVersion}/data/items.json`);
+  const data = await resp.json();
+  saveItemsCache(data);
+  return data;
+}
+
+function buildIconMap(iJson) {
+  const map = {};
+  for (const item of Object.values(iJson)) {
+    if (item.Name && item.IconId != null) map[item.Name] = item.IconId;
+  }
+  return map;
+}
+
+function iconUrl(name) {
+  const id = NAME_TO_ICON[name];
+  if (!id || !fileVersion) return '';
+  return `https://cdn.projectgorgon.com/v${fileVersion}/icons/icon_${id}.png`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INVENTORY PROCESSING
+// ═══════════════════════════════════════════════════════════════
+function processInventory(report) {
+  onPersonSet = new Set();
+  const byName = {}; // name → {category, locations: {vault→count}}
+
+  for (const item of (report.Items || [])) {
+    const tid = item.TypeID;
+    if (tid == null) continue;
+
+    const cdnItem  = itemsJson['item_' + tid];
+    const baseName = cdnItem ? cdnItem.Name : (item.Name || `Unknown (${tid})`);
+
+    // Determine category: static list first, then EquipSlot
+    let cat = NAME_TO_CATEGORY[baseName];
+    if (!cat && cdnItem && cdnItem.EquipSlot) {
+      cat = EQUIP_SLOT_TO_CAT[cdnItem.EquipSlot] || null;
+    }
+    if (!cat) cat = 'Other';
+
+    const vault = item.StorageVault || (item.IsInInventory ? 'Inventory' : 'Unknown');
+    if (!item.StorageVault) onPersonSet.add(baseName);
+
+    if (!byName[baseName]) byName[baseName] = { category: cat, locations: {} };
+    byName[baseName].locations[vault] = (byName[baseName].locations[vault] || 0) + (item.StackSize || 1);
+  }
+
+  // Build category map
+  const map = {};
+  for (const [name, data] of Object.entries(byName)) {
+    if (data.category === 'Other') continue; // skip uncategorized
+    if (!map[data.category]) map[data.category] = [];
+    map[data.category].push({ name, locations: data.locations });
+  }
+  // Sort each category alphabetically
+  for (const items of Object.values(map)) items.sort((a, b) => a.name.localeCompare(b.name));
+  return map;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatLocs(locs) {
+  const e = Object.entries(locs);
+  if (!e.length) return '';
+  if (e.length === 1) { const [v,c] = e[0]; return c > 1 ? `${v} ×${c}` : v; }
+  return e.map(([v,c]) => c > 1 ? `${v}×${c}` : v).join(', ');
+}
+
+function getInvSet() {
+  const s = new Set();
+  for (const items of Object.values(inventoryMap)) for (const i of items) s.add(i.name);
+  return s;
+}
+
+// Items currently on person, in a hoplology category, not yet studied
+function getToStudyItems() {
+  const result = [];
+  for (const cat of [...STATIC_CAT_ORDER, ...DERIVED_CAT_ORDER]) {
+    const masterList = STATIC_CATEGORIES[cat] || DERIVED_CATEGORIES[cat] || [];
+    for (const name of masterList) {
+      if (onPersonSet.has(name) && !studied[name]) {
+        const invItems = inventoryMap[cat] || [];
+        const entry = invItems.find(i => i.name === name);
+        result.push({ name, cat, inInventory: true, locations: entry ? entry.locations : {} });
+      }
+    }
+  }
+  return result;
+}
+
+// Items to show for a given tab:
+// Static categories  → full list from STATIC_CATEGORIES, with in-inventory flag
+// Derived categories → full list from DERIVED_CATEGORIES (all EquipSlot items), with in-inventory flag
+function getTabItems(cat) {
+  const masterList = STATIC_CATEGORIES[cat] || DERIVED_CATEGORIES[cat];
+  if (masterList) {
+    const invItems = inventoryMap[cat] || [];
+    const invMap = Object.fromEntries(invItems.map(i => [i.name, i]));
+    return masterList.map(name => ({
+      name,
+      inInventory: !!invMap[name],
+      locations:   invMap[name] ? invMap[name].locations : {},
+    }));
+  }
+  // Fallback: inventory-only (shouldn't normally hit this)
+  return (inventoryMap[cat] || []).map(i => ({
+    name: i.name, inInventory: true, locations: i.locations
+  }));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════════════
+function countStudied(items) { return items.filter(i => studied[i.name]).length; }
+function countInInv(items)   { return items.filter(i => i.inInventory).length; }
+
+function renderTabBar() {
+  document.getElementById('tab-bar').innerHTML = ALL_TABS.map(cat => {
+    const active = cat === activeTab ? ' active' : '';
+    let badge = '';
+    if (cat === 'Summary') {
+      let tot = 0, st = 0;
+      for (const c of ALL_TABS.filter(c => c !== 'Summary' && c !== 'To Study')) {
+        const its = getTabItems(c);
+        tot += its.length;
+        st  += countStudied(its);
+      }
+      badge = `<span class="badge">${st}/${tot}</span>`;
+    } else if (cat === 'To Study') {
+      const n = getToStudyItems().length;
+      if (n > 0) badge = `<span class="badge">${n}</span>`;
+    } else {
+      const its = getTabItems(cat);
+      const st  = countStudied(its);
+      const tot = its.length;
+      if (tot > 0) badge = `<span class="badge">${st}/${tot}</span>`;
+    }
+    const prog = badge && parseInt(badge.match(/(\d+)\//)?.[1] || 0) > 0 ? ' has-progress' : '';
+    const urgent = cat === 'To Study' && badge ? ' has-progress' : '';
+    return `<div class="tab${active}${prog}${urgent}" onclick="switchTab(${JSON.stringify(cat).replace(/"/g,'&quot;')})">${escHtml(cat)}${badge}</div>`;
+  }).join('');
+}
+
+function renderItemRow(item) {
+  const isStudied = !!studied[item.name];
+  const rowCls  = isStudied ? ' is-studied' : '';
+  const nameCls = isStudied ? ' is-studied' : '';
+  const invBadge = item.inInventory ? '<span class="badge-inv">In Inventory</span>' : '';
+  const loc      = item.inInventory ? `<span class="badge-loc">${escHtml(formatLocs(item.locations))}</span>` : '';
+  const jName    = JSON.stringify(item.name).replace(/"/g, '&quot;');
+  const url      = iconUrl(item.name);
+  const icon     = url
+    ? `<img class="item-icon" src="${url}" loading="lazy" onerror="this.style.visibility='hidden'" alt="">`
+    : '<span class="item-icon-ph"></span>';
+  return `<div class="item-row${rowCls}">
+  <input type="checkbox" class="item-checkbox" ${isStudied?'checked':''} onchange="toggleStudied(${jName},this.checked)">
+  ${icon}
+  <span class="item-name${nameCls}">${escHtml(item.name)}</span>
+  ${invBadge}
+  ${loc}
+</div>`;
+}
+
+function renderItemList(items) {
+  if (!items.length) return '<div class="empty">No items in this category.</div>';
+  return `<div class="item-list">${items.map(renderItemRow).join('')}</div>`;
+}
+
+function renderSummary() {
+  const cards = ALL_TABS.filter(c => c !== 'Summary').map(cat => {
+    const its   = getTabItems(cat);
+    const tot   = its.length;
+    const inInv = countInInv(its);
+    const st    = countStudied(its);
+    const pct   = tot > 0 ? Math.round(st / tot * 100) : 0;
+    return `<div class="summary-card">
+  <h3>${escHtml(cat)}</h3>
+  <div class="prog-bar"><div class="fill" style="width:${pct}%"></div></div>
+  <div class="summary-nums">
+    <div>Studied <span>${st}</span></div>
+    <div>In Inventory <span>${inInv}</span></div>
+    <div>Total <span>${tot}</span></div>
+  </div>
+</div>`;
+  }).join('');
+  return `<div class="summary-grid">${cards}</div>`;
+}
+
+function renderToStudy() {
+  const items = getToStudyItems();
+  if (!items.length) {
+    return onPersonSet.size === 0
+      ? '<div class="empty">Load an inventory JSON to see what you can study right now.</div>'
+      : '<div class="empty">Nothing on your person needs studying — you\'re all caught up!</div>';
+  }
+  // Group by category
+  const grouped = {};
+  for (const item of items) {
+    if (!grouped[item.cat]) grouped[item.cat] = [];
+    grouped[item.cat].push(item);
+  }
+  let html = `<div class="cat-header"><strong>To Study</strong> <span class="cat-stats">${items.length} item${items.length !== 1 ? 's' : ''} on your person, not yet studied</span></div>`;
+  for (const cat of [...STATIC_CAT_ORDER, ...DERIVED_CAT_ORDER]) {
+    if (!grouped[cat]) continue;
+    html += `<div class="search-cat-label">${escHtml(cat)}</div>${renderItemList(grouped[cat])}`;
+  }
+  return html;
+}
+
+function renderSearch(q) {
+  const lq = q.toLowerCase();
+  let html = '', found = false;
+  for (const cat of ALL_TABS.filter(c => c !== 'Summary' && c !== 'To Study')) {
+    const its = getTabItems(cat).filter(i => i.name.toLowerCase().includes(lq));
+    if (!its.length) continue;
+    found = true;
+    html += `<div class="search-cat-label">${escHtml(cat)}</div>${renderItemList(its)}`;
+  }
+  return found ? html : '<div class="empty">No items match your search.</div>';
+}
+
+function render() {
+  renderTabBar();
+  const content = document.getElementById('main-content');
+  if (searchQuery) { content.innerHTML = renderSearch(searchQuery); return; }
+  if (activeTab === 'Summary')  { content.innerHTML = renderSummary();  return; }
+  if (activeTab === 'To Study') { content.innerHTML = renderToStudy();  return; }
+
+  const items = getTabItems(activeTab);
+  const st    = countStudied(items);
+  const inInv = countInInv(items);
+  const tot   = items.length;
+
+  let stats = `${st} studied`;
+  if (inventoryMap && Object.keys(inventoryMap).length) stats += ` · ${inInv} in inventory`;
+  stats += ` · ${tot} total`;
+
+  content.innerHTML =
+    `<div class="cat-header"><strong>${escHtml(activeTab)}</strong> <span class="cat-stats">${stats}</span></div>` +
+    renderItemList(items);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ACTIONS
+// ═══════════════════════════════════════════════════════════════
+function switchTab(cat) {
+  activeTab   = cat;
+  searchQuery = '';
+  document.getElementById('search-input').value = '';
+  render();
+}
+
+function toggleStudied(name, checked) {
+  if (checked) studied[name] = true; else delete studied[name];
+  saveStudied();
+  render();
+}
+
+function onSearch(val) {
+  searchQuery = val.trim();
+  render();
+}
+
+function updateMeta() {
+  const el = document.getElementById('inv-meta');
+  el.textContent = inventoryMeta
+    ? `${inventoryMeta.character} · ${inventoryMeta.server} · ${inventoryMeta.timestamp}`
+    : 'No inventory loaded';
+}
+
+async function loadSkillReport() {
+  if (!window.showOpenFilePicker) {
+    alert('File System Access API not supported. Try Chrome or Edge.');
+    return;
+  }
+  try {
+    const [handle] = await window.showOpenFilePicker({
+      types: [{ description: 'Skill Report', accept: { 'text/plain': ['.txt'] } }],
+    });
+    const file = await handle.getFile();
+    const text = await file.text();
+    applySkillReport(text);
+  } catch(e) {
+    if (e.name !== 'AbortError') console.error('Skill report load failed:', e);
+  }
+}
+
+function applySkillReport(text) {
+  // Format: "Equipment Studied:\n\n  Item Name\n  Item Name\n..."
+  const names = text
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l && l !== 'Equipment Studied:');
+
+  // Build a lowercase lookup of all known names for fast exact matching
+  const knownLower = {};
+  for (const names_ of [...Object.values(STATIC_CATEGORIES), ...Object.values(DERIVED_CATEGORIES)]) {
+    for (const n of names_) knownLower[n.toLowerCase()] = n;
+  }
+
+  let newlyStudied = 0;
+  for (const raw of names) {
+    // Try exact match (case-insensitive) first
+    const canonical = knownLower[raw.toLowerCase()] || findBaseItemName(raw);
+    if (canonical && !studied[canonical]) {
+      studied[canonical] = true;
+      newlyStudied++;
+    }
+  }
+
+  if (newlyStudied > 0) {
+    saveStudied();
+    render();
+    showToast(`Skill report: ${newlyStudied} new item${newlyStudied !== 1 ? 's' : ''} marked studied`);
+  } else {
+    showToast('Skill report: nothing new to mark');
+  }
+}
+
+async function applyInventoryJson(json, filename) {
+  inventoryMap  = processInventory(json);
+  reportsLastFile = filename;
+  saveInvRaw(json);
+  inventoryMeta = {
+    character: json.Character  || '?',
+    server:    json.ServerName || '?',
+    timestamp: json.Timestamp  || '?',
+  };
+  saveMeta(inventoryMeta);
+  updateMeta();
+  render();
+}
+
+async function startReportsWatch() {
+  if (!window.showDirectoryPicker) {
+    alert('File System Access API not supported. Try Chrome or Edge.');
+    return;
+  }
+  try {
+    const handle = await window.showDirectoryPicker({ mode: 'read' });
+    await activateReportsDir(handle, true);
+  } catch(e) {
+    if (e.name !== 'AbortError') console.error('Reports folder pick failed:', e);
+  }
+}
+
+async function activateReportsDir(handle, persist) {
+  reportsDirHandle = handle;
+  if (persist) await saveHandle('reportsDir', handle);
+  if (reportsPollId) clearInterval(reportsPollId);
+  // Load immediately then poll
+  await pollReportsFolder();
+  reportsPollId = setInterval(pollReportsFolder, 5000);
+  document.getElementById('reports-btn').textContent = '📂 ' + handle.name;
+}
+
+async function pollReportsFolder() {
+  if (!reportsDirHandle) return;
+  try {
+    let newestName = '';
+    let newestTime = 0;
+    let newestHandle = null;
+    for await (const [name, fh] of reportsDirHandle.entries()) {
+      if (fh.kind !== 'file') continue;
+      if (!/_items_.*\.json$/i.test(name)) continue;
+      const f = await fh.getFile();
+      if (f.lastModified > newestTime) {
+        newestTime   = f.lastModified;
+        newestName   = name;
+        newestHandle = fh;
+      }
+    }
+    if (newestName && newestName !== reportsLastFile) {
+      const file = await newestHandle.getFile();
+      const json = JSON.parse(await file.text());
+      await applyInventoryJson(json, newestName);
+    }
+  } catch(e) {
+    console.warn('Reports folder poll error:', e);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LOG WATCHER
+// ═══════════════════════════════════════════════════════════════
+async function toggleLogWatch() {
+  if (logPollId) {
+    stopLogWatch();
+  } else if (logHandle) {
+    // Stored handle needs re-authorization via user gesture
+    const perm = await logHandle.requestPermission({ mode: 'read' });
+    if (perm === 'granted') await activateLogHandle(logHandle, true);
+  } else {
+    await startLogWatch();
+  }
+}
+
+async function startLogWatch() {
+  if (!window.showOpenFilePicker) {
+    alert('File System Access API not supported in this browser.\nTry Chrome or Edge.');
+    return;
+  }
+  try {
+    const [handle] = await window.showOpenFilePicker({
+      types: [{ description: 'Log files', accept: { 'text/plain': ['.log', '.txt'] } }],
+      multiple: false,
+    });
+    await activateLogHandle(handle, true);
+  } catch(e) {
+    if (e.name !== 'AbortError') console.error('Log watch failed:', e);
+  }
+}
+
+async function activateLogHandle(handle, persist) {
+  logHandle   = handle;
+  logLastSize = 0;
+  if (persist) await saveHandle('logFile', handle);
+  // Seek to end — only watch new lines going forward
+  const file = await handle.getFile();
+  logLastSize = file.size;
+  if (logPollId) clearInterval(logPollId);
+  logPollId = setInterval(pollLog, LOG_POLL_MS);
+  const btn = document.getElementById('log-btn');
+  btn.classList.add('watching');
+  btn.textContent = '👁 ' + handle.name;
+}
+
+function stopLogWatch() {
+  clearInterval(logPollId);
+  logPollId = null;
+  logHandle = null;
+  clearHandle('logFile');
+  const btn = document.getElementById('log-btn');
+  btn.classList.remove('watching');
+  btn.textContent = '👁 Watch Log';
+}
+
+async function pollLog() {
+  if (!logHandle) return;
+  try {
+    const file = await logHandle.getFile();
+    if (file.size <= logLastSize) return; // nothing new
+    const slice = file.slice(logLastSize, file.size);
+    const text  = await slice.text();
+    logLastSize = file.size;
+
+    const lines = text.split('\n');
+    for (const line of lines) {
+      if (HOPLO_RE.test(line)) {
+        startHoplologyTimer();
+      }
+      const studiedMatch = line.match(STUDIED_RE);
+      if (studiedMatch) {
+        const loggedName = studiedMatch[1];
+        const baseName   = findBaseItemName(loggedName);
+        if (baseName && !studied[baseName]) {
+          studied[baseName] = true;
+          saveStudied();
+          // invalidate sorted cache in case DERIVED_CATEGORIES changed
+          knownNamesSorted = null;
+          render();
+          showToast(baseName);
+          if (Notification.permission === 'granted') {
+            new Notification('Hoplology: item studied!', { body: `✓ ${baseName}` });
+          }
+        }
+      }
+    }
+  } catch(e) {
+    console.warn('Log poll error:', e);
+  }
+}
+
+function startHoplologyTimer() {
+  if (timerTickId) clearInterval(timerTickId);
+  timerEndAt = Date.now() + TIMER_DURATION * 1000;
+  const el = document.getElementById('timer-display');
+  el.classList.add('active');
+  el.classList.remove('urgent');
+  updateTimerDisplay();
+  timerTickId = setInterval(tickTimer, 500); // poll every 500ms so late fires don't skip a second
+}
+
+function tickTimer() {
+  const remaining = Math.ceil((timerEndAt - Date.now()) / 1000);
+  if (remaining <= 0) {
+    clearInterval(timerTickId);
+    timerTickId = null;
+    const el = document.getElementById('timer-display');
+    el.classList.remove('urgent');
+    el.classList.remove('active');
+    el.textContent = '⏱ 5:00';
+    if (Notification.permission === 'granted') {
+      new Notification('Hoplology ready!', { body: '5 minutes have passed — time to study another item.' });
+    }
+    return;
+  }
+  updateTimerDisplay();
+}
+
+function updateTimerDisplay() {
+  const remaining = Math.max(0, Math.ceil((timerEndAt - Date.now()) / 1000));
+  const m  = Math.floor(remaining / 60);
+  const s  = remaining % 60;
+  const el = document.getElementById('timer-display');
+  el.textContent = `⏱ ${m}:${String(s).padStart(2,'0')}`;
+  if (remaining <= 30) el.classList.add('urgent');
+  else el.classList.remove('urgent');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+async function init() {
+  loadStudied();
+  // Request notification permission for the hoplology timer
+  if (Notification.permission === 'default') Notification.requestPermission();
+  inventoryMeta = loadMeta();
+  updateMeta();
+
+  // Fetch / restore items.json
+  try {
+    fileVersion        = await fetchFileVersion();
+    itemsJson          = await fetchItemsJson();
+    NAME_TO_ICON       = buildIconMap(itemsJson);
+    DERIVED_CATEGORIES = buildDerivedCategories(itemsJson);
+    knownNamesSorted   = null; // rebuild with full derived list
+  } catch(e) {
+    console.error('Could not load items.json:', e);
+    itemsJson = {};
+  }
+
+  // Remove loading indicator
+  const msg = document.getElementById('loading-msg');
+  if (msg) msg.remove();
+
+  // Restore cached inventory (shown immediately while folder watcher re-confirms)
+  const cached = loadInvRaw();
+  if (cached) {
+    inventoryMap = processInventory(cached);
+  }
+
+  render();
+
+  // Restore persisted file handles (runs after first render so UI is visible)
+  const [storedLog, storedDir] = await Promise.all([
+    loadHandle('logFile'),
+    loadHandle('reportsDir'),
+  ]);
+
+  if (storedLog) {
+    const perm = await storedLog.queryPermission({ mode: 'read' });
+    if (perm === 'granted') {
+      await activateLogHandle(storedLog, false);
+    } else {
+      // Need a user gesture — show the button as "click to re-authorize"
+      const btn = document.getElementById('log-btn');
+      btn.textContent = '👁 Re-authorize Log';
+      btn.title = storedLog.name;
+      logHandle = storedLog; // keep for when they click
+    }
+  }
+
+  if (storedDir) {
+    const perm = await storedDir.queryPermission({ mode: 'read' });
+    if (perm === 'granted') {
+      await activateReportsDir(storedDir, false);
+    } else {
+      const btn = document.getElementById('reports-btn');
+      btn.textContent = '📂 Re-authorize Folder';
+      btn.title = storedDir.name;
+      // Override click to re-request permission then activate
+      btn.onclick = async () => {
+        const granted = await storedDir.requestPermission({ mode: 'read' });
+        if (granted === 'granted') {
+          btn.onclick = startReportsWatch;
+          await activateReportsDir(storedDir, true);
+        }
+      };
+    }
+  }
+}
+
+init();
+</script>
+</body>
+</html>

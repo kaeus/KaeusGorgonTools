@@ -3700,6 +3700,7 @@ html[data-theme="dark"] .turnin-header.active {
 html[data-theme="dark"] .turnin-quest-card {
     background: #1a1e38;
     border-color: #2a2e58;
+    color: #e0e0f0;
 }
 html[data-theme="dark"] .turnin-item-name {
     color: #c0c0e0;
