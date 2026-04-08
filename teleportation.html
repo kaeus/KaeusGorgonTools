@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Gorgon: Teleportation Machine Codes</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="theme.js"></script>
+    <style>
+        .tp-controls {
+            padding: 20px 30px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .tp-controls input[type="text"] {
+            flex: 1;
+            min-width: 200px;
+            max-width: 400px;
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            font-size: 0.95em;
+        }
+
+        .tp-controls input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102,126,234,0.2);
+        }
+
+        .tp-controls label {
+            font-weight: 600;
+            font-size: 0.9em;
+            color: #495057;
+        }
+
+        .tp-body {
+            padding: 20px 30px 40px;
+        }
+
+        .tp-note {
+            font-size: 0.82em;
+            color: #6c757d;
+            margin-bottom: 18px;
+            padding: 10px 14px;
+            background: #f8f9fa;
+            border-left: 3px solid #667eea;
+            border-radius: 0 6px 6px 0;
+        }
+
+        .zone-section {
+            margin-bottom: 28px;
+        }
+
+        .zone-title {
+            font-size: 1.1em;
+            font-weight: 700;
+            color: #495057;
+            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+            border-left: 4px solid #667eea;
+            padding: 8px 14px;
+            border-radius: 0 6px 6px 0;
+            margin-bottom: 0;
+        }
+
+        .tp-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+        }
+
+        .tp-table th {
+            background: #f1f3f5;
+            color: #495057;
+            font-weight: 600;
+            padding: 7px 12px;
+            text-align: left;
+            border-bottom: 2px solid #dee2e6;
+        }
+
+        .tp-table th:last-child {
+            text-align: left;
+        }
+
+        .tp-table td {
+            padding: 7px 12px;
+            border-bottom: 1px solid #f0f0f0;
+            vertical-align: middle;
+        }
+
+        .tp-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .tp-table tr:hover td {
+            background: #f8f9ff;
+        }
+
+        .code-badge {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            font-family: 'Courier New', monospace;
+            font-size: 0.88em;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin: 2px 3px 2px 0;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.15s, transform 0.1s;
+        }
+
+        .code-badge:hover {
+            background: #5a6fd6;
+            transform: translateY(-1px);
+        }
+
+        .code-badge.copied {
+            background: #28a745;
+        }
+
+        html[data-theme="dark"] .code-badge.copied {
+            background: #1a6b2e;
+        }
+
+        .location-name {
+            color: #212529;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px 20px;
+            color: #6c757d;
+            font-style: italic;
+        }
+
+        .match-count {
+            font-size: 0.85em;
+            color: #6c757d;
+            margin-left: auto;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* ── Dark mode ─────────────────────────────────────────── */
+        html[data-theme="dark"] .tp-controls {
+            background: #252540;
+            border-bottom-color: #3a3a5a;
+        }
+
+        html[data-theme="dark"] .tp-controls label {
+            color: #c0c0e0;
+        }
+
+        html[data-theme="dark"] .tp-controls input[type="text"] {
+            background: #2a2a44;
+            border-color: #3a3a5a;
+            color: #e0e0f0;
+        }
+
+        html[data-theme="dark"] .tp-controls input[type="text"]:focus {
+            border-color: #8899ff;
+            box-shadow: 0 0 0 2px rgba(136,153,255,0.2);
+        }
+
+        html[data-theme="dark"] .tp-controls input[type="text"]::placeholder {
+            color: #6666aa;
+        }
+
+        html[data-theme="dark"] .tp-note {
+            background: #1e2240;
+            border-left-color: #8899ff;
+            color: #9090b0;
+        }
+
+        html[data-theme="dark"] .zone-title {
+            background: linear-gradient(135deg, rgba(136,153,255,0.1) 0%, rgba(118,75,162,0.1) 100%);
+            border-left-color: #8899ff;
+            color: #c0c0e0;
+        }
+
+        html[data-theme="dark"] .tp-table th {
+            background: #252540;
+            color: #8888aa;
+            border-bottom-color: #3a3a5a;
+        }
+
+        html[data-theme="dark"] .tp-table td {
+            border-bottom-color: #2a2a40;
+        }
+
+        html[data-theme="dark"] .tp-table tr:hover td {
+            background: #2a2a50;
+        }
+
+        html[data-theme="dark"] .location-name {
+            color: #e0e0f0;
+        }
+
+        html[data-theme="dark"] .match-count {
+            color: #8888aa;
+        }
+
+        html[data-theme="dark"] .no-results {
+            color: #8888aa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔮 Teleportation Machine Codes</h1>
+            <p>Project Gorgon — codes confirmed as of March 28, 2025</p>
+        </header>
+
+        <div class="nav">
+            <a href="index.html">Quest/Inventory Tracker</a>
+            <a href="maps.html">Interactive Maps</a>
+            <a href="chat-watcher.html">Chat Watcher</a>
+            <a href="dps.html">Combat Tracker</a>
+            <a href="timers.html">Timers</a>
+            <a href="hoplology-tracker.html">Hoplology Tracker</a>
+            <b>Teleportation</b>
+        </div>
+
+        <div class="tp-controls">
+            <label for="searchInput">Search:</label>
+            <input type="text" id="searchInput" placeholder="Location name or code (e.g. 0055, Serbule, Docks)..." oninput="filterTable()">
+            <span class="match-count" id="matchCount"></span>
+        </div>
+
+        <div class="tp-body">
+            <div id="tableContainer"></div>
+            <div class="no-results hidden" id="noResults">No locations match your search.</div>
+        </div>
+    </div>
+
+    <script>
+        const TELEPORT_DATA = [
+            {
+                zone: "Anagoge Island",
+                locations: [
+                    { name: "Docks", codes: ["0055", "3049"] },
+                    { name: "Outside Anagoge Records Facility", codes: ["0014", "0049", "0116", "0738"] },
+                    { name: "Inside Anagoge Records Facility Entrance", codes: ["0020", "2020", "2348", "4329", "5750"] },
+                ]
+            },
+            {
+                zone: "Serbule Hills",
+                locations: [
+                    { name: "Portal to Serbule", codes: ["0047", "0082"] },
+                    { name: "Outside Spider Cave", codes: ["0001"] },
+                    { name: "North Center Farm", codes: ["0128"] },
+                    { name: "Julius Patton Farm", codes: ["0103", "4932"] },
+                    { name: "Brianna Willer Farm", codes: ["0067"] },
+                    { name: "Near Western Teleportation Pad", codes: ["0042"] },
+                    { name: "Near Ranalon Den", codes: ["0109"] },
+                    { name: "Outside Ranalon Den", codes: ["0134"] },
+                    { name: "Southern Teleportation Pad", codes: ["0007", "9696"] },
+                ]
+            },
+            {
+                zone: "Serbule",
+                locations: [
+                    { name: "Docks", codes: ["0096", "0834", "9247", "9985"] },
+                    { name: "Roof of Serbule Keep Market", codes: ["0035", "5765"] },
+                    { name: "Teleport pad outside Borghild", codes: ["0004"] },
+                    { name: "Near the Mushroom Circle", codes: ["0012"] },
+                    { name: "Ivyn's Farm", codes: ["0093", "0320"] },
+                    { name: "Outside Carpal Tunnels", codes: ["0166"] },
+                    { name: "Outside Crystal Cavern", codes: ["0039"] },
+                    { name: "Northwest Hill", codes: ["0033", "5763", "8367"] },
+                    { name: "Southeast Hill", codes: ["0064", "7998"] },
+                    { name: "Southwest Hill", codes: ["0131"] },
+                    { name: "Inside PvP Arena Entrance", codes: ["0137", "3690"] },
+                    { name: "Inside Serbule Sewers mid-point", codes: ["0032", "5762"] },
+                    { name: "Inside Serbule Crypt Entrance", codes: ["0078"] },
+                    { name: "Inside Brain Bug Cave mid-point", codes: ["0026", "0048", "1238", "5756"] },
+                    { name: "Inside Borghild Entrance", codes: ["0051"] },
+                    { name: "Inside Myconian Cave Entrance", codes: ["0010", "9966"] },
+                    { name: "Inside Carpal Tunnels Entrance", codes: ["0165"] },
+                ]
+            },
+            {
+                zone: "Sun Vale",
+                locations: [
+                    { name: "Bell to Serbule", codes: ["0063"] },
+                    { name: "Top of Giant Tree", codes: ["0117", "2015"] },
+                    { name: "North Shore", codes: ["0088"] },
+                    { name: "Northeast Island Center", codes: ["0108"] },
+                    { name: "Northeast Island Resort", codes: ["0015", "0050"] },
+                    { name: "Animal Town", codes: ["0028", "5758"] },
+                    { name: "Outside Winter Nexus", codes: ["0155"] },
+                    { name: "Southeast Shore", codes: ["0143"] },
+                    { name: "Inside Sacrificial Sea Cave Entrance", codes: ["0057"] },
+                    { name: "Inside Molybdenum Mine Entrance", codes: ["0153"] },
+                    { name: "Inside Fish Bowl Cavern Entrance", codes: ["0118", "2016", "9269"] },
+                ]
+            },
+            {
+                zone: "Eltibule",
+                locations: [
+                    { name: "Portal to Serbule", codes: ["0000", "0212", "0790", "9363"] },
+                    { name: "Graveyard", codes: ["0034", "5764"] },
+                    { name: "Northeast Hill where Ciervos The Shadow World Boss Event Occurs", codes: ["0111", "0227"] },
+                    { name: "Back Door to Goblin Dungeon", codes: ["0136"] },
+                    { name: "Inside Goblin Dungeon Entrance", codes: ["0167", "0327"] },
+                    { name: "Inside Dark Chapel Entrance", codes: ["0059"] },
+                    { name: "Inside Boarded up Basement Entrance", codes: ["0065"] },
+                ]
+            },
+            {
+                zone: "Red Wing Casino",
+                locations: [
+                    { name: "Rahu Exit", codes: ["9357", "9552"] },
+                    { name: "Employee Exit to Eltibule", codes: ["0023", "5753"] },
+                    { name: "Outside the Guild Hall", codes: ["0156"] },
+                ]
+            },
+            {
+                zone: "Kur Mountains",
+                locations: [
+                    { name: "Portal to Eltibule", codes: ["0011", "8967"] },
+                    { name: "Portal to Ilmari", codes: ["0077"] },
+                    { name: "Portal to Gazluk", codes: ["0138"] },
+                    { name: "Jace Soral campfire", codes: ["0022", "5752"] },
+                    { name: "North of Town", codes: ["0043"] },
+                    { name: "Outside Yeti Cave", codes: ["0036", "5766"] },
+                    { name: "Western Dock", codes: ["0008", "0842"] },
+                    { name: "Inside Yeti Cave Entrance", codes: ["0085"] },
+                    { name: "The Village", codes: ["0421"] },
+                ]
+            },
+            {
+                zone: "Ilmari",
+                locations: [
+                    { name: "Portal to Kur Mountains", codes: ["0068"] },
+                    { name: "Arlan's Oasis", codes: ["0097", "6173", "9364"] },
+                    { name: "Center of Map", codes: ["0090"] },
+                    { name: "Northwest Desert", codes: ["0192"] },
+                    { name: "Southwest Desert", codes: ["0030", "5760"] },
+                ]
+            },
+            {
+                zone: "Rahu",
+                locations: [
+                    { name: "Docks", codes: ["0017", "0113", "0700", "5747"] },
+                    { name: "Portal to Ilmari", codes: ["-"] },
+                    { name: "Portal to Mysterious Locale", codes: ["0106"] },
+                    { name: "Left+Center of Map, On Road Leading Into Desert", codes: ["0045", "0080", "0574", "5348"] },
+                    { name: "Inside Rahu Sewers Entrance", codes: ["0002"] },
+                ]
+            },
+            {
+                zone: "Gazluk",
+                locations: [
+                    { name: "Portal to Kur Mountains", codes: ["0087", "0465"] },
+                    { name: "Prestonbule Teleportation Pad", codes: ["0003"] },
+                    { name: "Tower outside Tower View Cave", codes: ["0024", "2018", "5754"] },
+                    { name: "3-crystal patch north of New Prestonbule Cave", codes: ["0009"] },
+                    { name: "Outside Amaluk Valley Cave", codes: ["0056", "0091", "9469"] },
+                    { name: "Outside Windy View Cave", codes: ["0158", "0274"] },
+                    { name: "Outside Gazluk Keep", codes: ["0164", "0324"] },
+                    { name: "Inside Amaluk Valley Cave Western Entrance", codes: ["0084"] },
+                    { name: "Inside Amaluk Valley Cave Eastern Entrance", codes: ["2012"] },
+                    { name: "Inside No-Name Cave Entrance", codes: ["0031", "5761"] },
+                    { name: "Inside New Prestonbule Cave Entrance", codes: ["0139"] },
+                    { name: "Inside Gazluk Shadow Cave Entrance", codes: ["0098"] },
+                    { name: "Inside Gazluk Keep Entrance", codes: ["0081", "0264"] },
+                    { name: "Inside Gazluk Keep Lower Level After Beakhorse", codes: ["0018", "0381", "5748"] },
+                ]
+            },
+            {
+                zone: "Povus",
+                locations: [
+                    { name: "Portal to Gazluk", codes: ["0046"] },
+                    { name: "Portal to Vidaria", codes: ["0079", "6969", "7853"] },
+                    { name: "Shore North of Town", codes: ["0005", "9368"] },
+                    { name: "Near the Orc Forge", codes: ["0021", "5751"] },
+                    { name: "South-West Mountain", codes: ["0044"] },
+                    { name: "North Swamp Near Errruka's Cave", codes: ["0040", "2776"] },
+                    { name: "Outside Errruka's Cave", codes: ["0073"] },
+                    { name: "Inside Errruka's Cave Entrance", codes: ["0006", "0027", "0041", "0369", "5757", "5865"] },
+                    { name: "Inside Errruka's Cave Next to Cheb (\"Egg Run\" Location)", codes: ["0019", "2019", "5749", "9664", "9824"] },
+                    { name: "Inside Nightmare Caves Next to Skill Trainers", codes: ["0092"] },
+                    { name: "Inside Nightmare Caves Ship in a Bottle", codes: ["0037", "6927"] },
+                    { name: "Inside Nightmare Caves Yellow Room", codes: ["0025", "5755"] },
+                    { name: "Inside Nightmare Caves Lady Eleanor's Chamber", codes: ["0066", "0127", "2025", "9639"] },
+                ]
+            },
+            {
+                zone: "Vidaria",
+                locations: [
+                    { name: "Portal to Gazluk", codes: ["0083", "4552"] },
+                    { name: "Portal to Povus", codes: ["0029", "5759"] },
+                    { name: "Road/Swamp Close to Povus Portal", codes: ["0013"] },
+                    { name: "Northeast Mushroom Circle", codes: ["0112"] },
+                    { name: "Southwest Mushroom Circle", codes: ["0054", "8351", "9973"] },
+                    { name: "Southwest Farms", codes: ["0076"] },
+                    { name: "Southwest Control Sphere", codes: ["0038"] },
+                    { name: "Western Windmill", codes: ["0016"] },
+                ]
+            },
+            {
+                zone: "Statehelm",
+                locations: [
+                    { name: "Docks", codes: ["3487"] },
+                    { name: "Gardening area at the top of the tree", codes: ["9369"] },
+                    { name: "The Graveyard", codes: ["0052", "2017", "5782"] },
+                ]
+            },
+        ];
+
+        function copyCode(el, code) {
+            navigator.clipboard.writeText(code).then(() => {
+                el.classList.add('copied');
+                const orig = el.textContent;
+                el.textContent = '✓ ' + code;
+                setTimeout(() => {
+                    el.classList.remove('copied');
+                    el.textContent = orig;
+                }, 1200);
+            }).catch(() => {
+                // fallback
+                const ta = document.createElement('textarea');
+                ta.value = code;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                el.classList.add('copied');
+                setTimeout(() => el.classList.remove('copied'), 1200);
+            });
+        }
+
+        function buildTable() {
+            const container = document.getElementById('tableContainer');
+            container.innerHTML = '';
+
+            const query = document.getElementById('searchInput').value.trim().toLowerCase();
+            let totalMatches = 0;
+            let anyVisible = false;
+
+            for (const zone of TELEPORT_DATA) {
+                const matchedLocations = query
+                    ? zone.locations.filter(loc =>
+                        loc.name.toLowerCase().includes(query) ||
+                        loc.codes.some(c => c.includes(query)) ||
+                        zone.zone.toLowerCase().includes(query)
+                      )
+                    : zone.locations;
+
+                if (matchedLocations.length === 0) continue;
+
+                anyVisible = true;
+                totalMatches += matchedLocations.length;
+
+                const section = document.createElement('div');
+                section.className = 'zone-section';
+
+                const title = document.createElement('div');
+                title.className = 'zone-title';
+                title.textContent = zone.zone;
+                section.appendChild(title);
+
+                const table = document.createElement('table');
+                table.className = 'tp-table';
+
+                const thead = document.createElement('thead');
+                thead.innerHTML = '<tr><th>Location</th><th>Codes</th></tr>';
+                table.appendChild(thead);
+
+                const tbody = document.createElement('tbody');
+                for (const loc of matchedLocations) {
+                    const tr = document.createElement('tr');
+                    const nameTd = document.createElement('td');
+                    nameTd.className = 'location-name';
+                    nameTd.textContent = loc.name;
+
+                    const codesTd = document.createElement('td');
+                    for (const code of loc.codes) {
+                        const badge = document.createElement('span');
+                        badge.className = 'code-badge';
+                        badge.textContent = code;
+                        if (code !== '-') {
+                            badge.title = 'Click to copy';
+                            badge.addEventListener('click', () => copyCode(badge, code));
+                        }
+                        codesTd.appendChild(badge);
+                    }
+
+                    tr.appendChild(nameTd);
+                    tr.appendChild(codesTd);
+                    tbody.appendChild(tr);
+                }
+
+                table.appendChild(tbody);
+                section.appendChild(table);
+                container.appendChild(section);
+            }
+
+            const noResults = document.getElementById('noResults');
+            const matchCount = document.getElementById('matchCount');
+
+            if (!anyVisible) {
+                noResults.classList.remove('hidden');
+                matchCount.textContent = '';
+            } else {
+                noResults.classList.add('hidden');
+                if (query) {
+                    matchCount.textContent = `${totalMatches} location${totalMatches !== 1 ? 's' : ''} found`;
+                } else {
+                    matchCount.textContent = '';
+                }
+            }
+        }
+
+        function filterTable() {
+            buildTable();
+        }
+
+        buildTable();
+    </script>
+</body>
+</html>

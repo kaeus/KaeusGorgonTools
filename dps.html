@@ -92,7 +92,8 @@
         .pct-val   { color: #888; text-align: right; font-size: 0.85em; }
         .hits-val  { color: #aaa; text-align: right; }
 
-        .empty-panel { padding: 30px; text-align: center; color: #666; font-size: 0.9em; }
+        .empty-panel { padding: 30px; text-align: center; color: #888; font-size: 0.9em; }
+        .dps-empty-cell { color: #888; text-align: center; padding: 16px; }
 
         .raw-log {
             font-family: monospace; font-size: 0.8em; background: #0d0d22;
@@ -199,6 +200,8 @@
             <a href="chat-watcher.html">Chat Watcher</a>
             <b>Combat Tracker</b>
             <a href="timers.html">Timers</a>
+            <a href="hoplology-tracker.html">Hoplology Tracker</a>
+            <a href="teleportation.html">Teleportation</a>
         </div>
 
         <div class="controls">
@@ -782,7 +785,7 @@
                 const msg = !this.playerName ? 'Set your character name to track fights'
                     : availDays.length === 0 ? 'No fights with your outgoing damage yet'
                     : 'No fights on this day';
-                tbody.innerHTML = `<tr><td colspan="6" style="color:#555;text-align:center;padding:16px">${msg}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="6" class="dps-empty-cell">${msg}</td></tr>`;
                 return;
             }
 
@@ -1199,7 +1202,7 @@
                 lines = [...this.rawLines].reverse();
             }
             if (!lines.length) {
-                el.innerHTML = '<div style="color:#555;padding:12px">No raw lines for this fight.</div>';
+                el.innerHTML = '<div class="dps-empty-cell" style="padding:12px">No raw lines for this fight.</div>';
                 return;
             }
             for (const line of lines) {

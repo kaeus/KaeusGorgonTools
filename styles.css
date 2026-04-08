@@ -4575,3 +4575,58 @@ html[data-theme="dark"] .toast-close {
 html[data-theme="dark"] .toast-close:hover {
     color: #c0c0e0;
 }
+
+/* ==========================================================================
+   DARK MODE — additional overrides for inline styles & missing components
+   ========================================================================== */
+
+/* File picker inputs */
+html[data-theme="dark"] input[type="file"] {
+    background: #2a2a44;
+    border-color: #3a3a5a;
+    color: #c0c0e0;
+}
+
+/* Inline <code> blocks (e.g. file path in index.html file-loader) */
+html[data-theme="dark"] code {
+    background: #2a2a44 !important;
+    color: #c0c0e0 !important;
+}
+
+/* index.html — player log import status text (inline color) */
+html[data-theme="dark"] #playerLogImportStatus {
+    color: #8888aa !important;
+}
+
+/* index.html — Firefox/no-FSA yellow warning box (inline colors) */
+html[data-theme="dark"] #playerLogImportNote {
+    background: #3a2d00 !important;
+    border-color: #a08000 !important;
+    color: #d4aa00 !important;
+}
+
+/* dps.html — "Unmatched" count in summary row (dark bg, needs lighter color) */
+html[data-theme="dark"] #sumUnmatched {
+    color: #c09a60 !important;
+}
+
+/* dps.html — raw log tab description paragraph */
+html[data-theme="dark"] #tab-raw > p {
+    color: #9090b0 !important;
+}
+
+/* dps.html — color-legend spans inside raw tab description (e.g. #554444 "Dark") */
+html[data-theme="dark"] #tab-raw > p span {
+    color: #9090b0 !important;
+}
+
+/* dps.html — JS-generated empty-state cells in fight history table */
+html[data-theme="dark"] .fight-history-table .dps-empty-cell {
+    color: #9090b0;
+}
+
+/* tp-controls needed in styles.css for hoplology-tracker if it ever uses same class */
+html[data-theme="dark"] .tp-controls {
+    background: #252540;
+    border-bottom-color: #3a3a5a;
+}
