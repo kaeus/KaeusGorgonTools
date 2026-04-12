@@ -185,6 +185,7 @@
         .expand-icon { display: inline-block; width: 14px; color: #777; font-size: 0.8em; }
         .sort-icon { font-size: 0.7em; margin-left: 3px; }
         .player-name { font-weight: bold; }
+        .ability-icon { width: 20px; height: 20px; vertical-align: middle; margin-right: 5px; border-radius: 3px; }
     </style>
 </head>
 <body>
@@ -470,6 +471,8 @@
             this.windowSecs = parseInt(localStorage.getItem('gorgon-combat-window') || '30');
             this.playerName = localStorage.getItem('gorgon-combat-player') || '';
             this.sortState    = { your: 'dps', target: 'dps', incSrc: 'dps' };
+            this.abilityIconMap = {};
+            this.cdnVersion     = null;
             this.expandedRows = { target: new Set(), incSrc: new Set() };
             this.activeTab    = 'outgoing';
             this._renderTimer = null;
@@ -1093,8 +1096,10 @@
             for (const row of rows) {
                 const pct = row.dps / maxDps;
                 const tr  = document.createElement('tr');
+                const iconUrl = this.abilityIconUrl(row.ability);
+                const iconHtml = iconUrl ? `<img class="ability-icon" src="${iconUrl}" onerror="this.style.display='none'" alt="">` : '';
                 tr.innerHTML = `
-                    <td class="name-cell name-${barClass}">${this.esc(row.ability)}</td>
+                    <td class="name-cell name-${barClass}">${iconHtml}${this.esc(row.ability)}</td>
                     <td class="dps-val">${this.fmtDps(row.dps)}</td>
                     <td class="dmg-val">${this.fmt(row.damage)}</td>
                     <td class="hits-val">${row.hits}</td>
@@ -1218,12 +1223,74 @@
             return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         }
 
+        // ── CDN / Abilities ───────────────────────────────────────────────────
+        async resolveCdnVersion() {
+            const cached = localStorage.getItem('gorgon-cdn-version');
+            if (cached) return cached;
+            try {
+                const resp = await fetch('https://cdn.projectgorgon.com/fileversion.txt');
+                if (resp.ok) {
+                    const ver = (await resp.text()).trim();
+                    if (/^[a-zA-Z0-9]+$/.test(ver)) {
+                        localStorage.setItem('gorgon-cdn-version', ver);
+                        setTimeout(() => localStorage.removeItem('gorgon-cdn-version'), 15 * 60 * 1000);
+                        return ver;
+                    }
+                }
+            } catch {}
+            return '466';
+        }
+
+        async loadAbilitiesData() {
+            const CACHE_KEY = 'gorgon-dps-abilities-cache';
+            const TTL = 15 * 60 * 1000;
+            // Always resolve version first so icon URLs are correct regardless of cache state
+            const ver = await this.resolveCdnVersion();
+            this.cdnVersion = ver;
+            try {
+                const raw = localStorage.getItem(CACHE_KEY);
+                if (raw) {
+                    const { ts, data } = JSON.parse(raw);
+                    if (Date.now() - ts < TTL) {
+                        this._buildAbilityIconMap(data);
+                        return;
+                    }
+                }
+            } catch {}
+            try {
+                const resp = await fetch(`https://cdn.projectgorgon.com/v${ver}/data/abilities.json`);
+                if (!resp.ok) { console.warn('abilities.json fetch failed:', resp.status); return; }
+                const data = await resp.json();
+                try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data })); } catch {}
+                this._buildAbilityIconMap(data);
+            } catch (e) { console.warn('Could not load abilities.json:', e); }
+        }
+
+        _buildAbilityIconMap(data) {
+            this.abilityIconMap = {};
+            for (const entry of Object.values(data)) {
+                if (entry.Name && entry.IconID != null) {
+                    this.abilityIconMap[entry.Name] = entry.IconID;
+                }
+            }
+            this.scheduleRender();
+        }
+
+        abilityIconUrl(name) {
+            const id = this.abilityIconMap?.[name];
+            if (!id) return '';
+            return `https://cdn.projectgorgon.com/v${this.cdnVersion || '466'}/icons/icon_${id}.png`;
+        }
+
         async init() {
             // Restore settings
             document.getElementById('playerNameInput').value = this.playerName;
             document.querySelector(`.window-btn[data-secs="${this.windowSecs}"]`)?.classList.add('active');
             document.querySelectorAll('.window-btn').forEach(b => b.classList.remove('active'));
             document.querySelector(`.window-btn[data-secs="${this.windowSecs}"]`)?.classList.add('active');
+
+            // Load ability icon data from CDN in background
+            this.loadAbilitiesData();
 
             // Auto-start if we already have a saved handle
             const saved = await this.getSavedHandle();
