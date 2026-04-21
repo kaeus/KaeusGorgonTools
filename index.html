@@ -72,6 +72,7 @@
 
         <div class="tabs">
             <div class="tab active" data-tab="quests">📜 Quests</div>
+            <div class="tab" data-tab="workorders">📋 Work Orders</div>
             <div class="tab" data-tab="inventory">🎒 Inventory</div>
             <div class="tab" data-tab="stores">🛒 Vendors</div>
             <div class="tab" data-tab="prices">💰 Prices</div>
@@ -94,6 +95,89 @@
             </div>
 
             <div id="questList" class="quest-list"></div>
+        </div>
+
+        <div id="workorders" class="tab-content work-order-browser">
+            <div id="workOrderStats" class="quest-stats" style="display: none;">
+                <div class="stat-card">
+                    <div class="number" id="woCompletedCount">0</div>
+                    <div class="label">Completed</div>
+                </div>
+                <div class="stat-card">
+                    <div class="number" id="woActiveCount">0</div>
+                    <div class="label">Active</div>
+                </div>
+                <div class="stat-card">
+                    <div class="number" id="woAvailableCount">0</div>
+                    <div class="label">Available</div>
+                </div>
+                <div class="stat-card">
+                    <div class="number" id="woIndustryLevel">0</div>
+                    <div class="label">Industry Level</div>
+                </div>
+            </div>
+
+            <div class="wo-view-toolbar" id="woViewToolbar" style="display:none;">
+                <label class="wo-filter-toggle" title="Compact single-row layout for all sections">
+                    <input type="checkbox" id="woCompactToggle"> Compact view
+                </label>
+            </div>
+
+            <div id="woActiveSection" class="wo-section" style="display:none;">
+                <div class="accordion-header wo-accordion-header" data-wo-section="active">
+                    <div class="accordion-title">
+                        <span>📋 Active Work Orders</span>
+                        <span class="quest-count-badge" id="woActiveSectionCount">0</span>
+                    </div>
+                    <div class="accordion-icon">▼</div>
+                </div>
+                <div id="woActiveContent" class="accordion-content">
+                    <div class="wo-section-body">
+                        <div class="search-bar"><input type="text" id="woActiveSearch" placeholder="🔍 Search active work orders..."></div>
+                        <div id="woActiveList" class="quest-list"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="woCompletedSection" class="wo-section" style="display:none;">
+                <div class="accordion-header wo-accordion-header" data-wo-section="completed">
+                    <div class="accordion-title">
+                        <span>✅ Completed Work Orders</span>
+                        <span class="quest-count-badge" id="woCompletedSectionCount">0</span>
+                    </div>
+                    <div class="accordion-icon">▼</div>
+                </div>
+                <div id="woCompletedContent" class="accordion-content">
+                    <div class="wo-section-body">
+                        <div class="search-bar"><input type="text" id="woCompletedSearch" placeholder="🔍 Search completed work orders..."></div>
+                        <div id="woCompletedList" class="quest-list"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="woAvailableSection" class="wo-section" style="display:none;">
+                <div class="accordion-header wo-accordion-header" data-wo-section="available">
+                    <div class="accordion-title">
+                        <span>🆕 Available Work Orders</span>
+                        <span class="quest-count-badge" id="woAvailableSectionCount">0</span>
+                    </div>
+                    <div class="accordion-icon">▼</div>
+                </div>
+                <div id="woAvailableContent" class="accordion-content">
+                    <div class="wo-section-body">
+                        <div class="wo-filter-bar">
+                            <label class="wo-filter-toggle" title="Hides work orders we do not have the industry level to complete">
+                                <input type="checkbox" id="woFilterIndustry"> Filter Industry Level
+                            </label>
+                            <label class="wo-filter-toggle" title="Hides work orders we do not already have the item for">
+                                <input type="checkbox" id="woFilterItems"> Filter by Item
+                            </label>
+                        </div>
+                        <div class="search-bar"><input type="text" id="woAvailableSearch" placeholder="🔍 Search available work orders..."></div>
+                        <div id="woAvailableList" class="quest-list"></div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div id="inventory" class="tab-content inventory-browser">
@@ -216,6 +300,16 @@
                     this.fetchCDNData('quests.json'),
                     this.fetchCDNData('npcs.json')
                 ]);
+
+                // Build numeric quest ID → InternalName lookup before rekeying strips the
+                // original "quest_NNNNN" keys. Used for ProcessCompleteQuest log parsing.
+                this.questIdToInternalName = {};
+                for (const [key, q] of Object.entries(questsRaw)) {
+                    const m = /^quest_(\d+)$/.exec(key);
+                    if (m && q && q.InternalName) {
+                        this.questIdToInternalName[parseInt(m[1])] = q.InternalName;
+                    }
+                }
 
                 // Process quests into keyed lookup by InternalName
                 this.questsData = this.processToKeyedLookup(questsRaw, 'InternalName');
@@ -1134,6 +1228,482 @@
                 if (quest.Reward_Favor) rewards.push(`⭐ ${quest.Reward_Favor} Favor`);
 
                 return rewards;
+            }
+        }
+
+        // Work Orders Browser
+        function getWorkOrderCompletionKey() {
+            return currentCharacterKey
+                ? 'gorgon-workorder-completions:' + currentCharacterKey
+                : 'gorgon-workorder-completions';
+        }
+
+        class WorkOrderBrowser {
+            constructor(dataLoader) {
+                this.dataLoader = dataLoader;
+                this.allWorkOrders = [];
+                this.activeSet = new Set();
+                this.completedSet = new Set();
+                this.completions = {}; // { InternalName: epochMs }
+                this.industryLevel = 0;
+                this.itemsByInternalName = {};
+                this.workOrderItemsOwned = new Set();
+                this.searchQueries = { completed: '', active: '', available: '' };
+                // Collapse state — defaults: active + available open, completed closed
+                this._accordionState = { active: true, available: true, completed: false, ...JSON.parse(localStorage.getItem('gorgon-workorder-accordion') || '{}') };
+                // Available section filter toggles — default both off
+                this.filters = { industry: false, items: false, ...JSON.parse(localStorage.getItem('gorgon-workorder-filters') || '{}') };
+                // Compact view (single-row per card) — off by default
+                this.compact = JSON.parse(localStorage.getItem('gorgon-workorder-compact') || 'false');
+                this._handlersAttached = false;
+                this._filterHandlersAttached = false;
+                this._compactHandlerAttached = false;
+            }
+
+            _saveCompact() {
+                localStorage.setItem('gorgon-workorder-compact', JSON.stringify(!!this.compact));
+            }
+
+            _applyCompactUI() {
+                const root = document.getElementById('workorders');
+                if (root) root.classList.toggle('wo-compact', !!this.compact);
+                const cb = document.getElementById('woCompactToggle');
+                if (cb) cb.checked = !!this.compact;
+                const tb = document.getElementById('woViewToolbar');
+                if (tb) tb.style.display = 'flex';
+            }
+
+            attachCompactHandler() {
+                if (this._compactHandlerAttached) return;
+                const cb = document.getElementById('woCompactToggle');
+                if (cb) cb.addEventListener('change', () => {
+                    this.compact = cb.checked;
+                    this._saveCompact();
+                    this._applyCompactUI();
+                    this.renderSection('active');
+                    this.renderSection('available');
+                    this.renderSection('completed');
+                });
+                this._compactHandlerAttached = true;
+            }
+
+            _saveFilters() {
+                localStorage.setItem('gorgon-workorder-filters', JSON.stringify(this.filters));
+            }
+
+            _applyFiltersToUI() {
+                const i = document.getElementById('woFilterIndustry');
+                const it = document.getElementById('woFilterItems');
+                if (i) i.checked = !!this.filters.industry;
+                if (it) it.checked = !!this.filters.items;
+            }
+
+            attachFilterHandlers() {
+                if (this._filterHandlersAttached) return;
+                const i = document.getElementById('woFilterIndustry');
+                const it = document.getElementById('woFilterItems');
+                if (i) i.addEventListener('change', () => {
+                    this.filters.industry = i.checked;
+                    this._saveFilters();
+                    this.renderSection('available');
+                });
+                if (it) it.addEventListener('change', () => {
+                    this.filters.items = it.checked;
+                    this._saveFilters();
+                    this.renderSection('available');
+                });
+                this._filterHandlersAttached = true;
+            }
+
+            _saveAccordionState() {
+                localStorage.setItem('gorgon-workorder-accordion', JSON.stringify(this._accordionState));
+            }
+
+            _applyAccordionState() {
+                for (const section of ['active', 'available', 'completed']) {
+                    const header = document.querySelector(`.wo-accordion-header[data-wo-section="${section}"]`);
+                    const content = document.getElementById(`wo${section.charAt(0).toUpperCase() + section.slice(1)}Content`);
+                    if (!header || !content) continue;
+                    const open = !!this._accordionState[section];
+                    header.classList.toggle('active', open);
+                    content.classList.toggle('active', open);
+                }
+            }
+
+            attachAccordionHandlers() {
+                if (this._handlersAttached) return;
+                document.querySelectorAll('.wo-accordion-header').forEach(header => {
+                    header.addEventListener('click', () => {
+                        const section = header.getAttribute('data-wo-section');
+                        const content = document.getElementById(`wo${section.charAt(0).toUpperCase() + section.slice(1)}Content`);
+                        const opened = !header.classList.contains('active');
+                        header.classList.toggle('active', opened);
+                        if (content) content.classList.toggle('active', opened);
+                        this._accordionState[section] = opened;
+                        this._saveAccordionState();
+                    });
+                });
+                this._handlersAttached = true;
+            }
+
+            async initialize() {
+                if (!this.dataLoader.characterData || !this.dataLoader.questsData) return;
+
+                // Build item InternalName → CDN item lookup for objective icons
+                this.itemsByInternalName = {};
+                if (this.dataLoader.cdnItemsData) {
+                    for (const item of Object.values(this.dataLoader.cdnItemsData)) {
+                        if (item.InternalName) this.itemsByInternalName[item.InternalName] = item;
+                    }
+                }
+
+                // Collect all work orders from CDN quests (Keywords contains "WorkOrder")
+                this.allWorkOrders = [];
+                for (const q of Object.values(this.dataLoader.questsData)) {
+                    if (Array.isArray(q.Keywords) && q.Keywords.includes('WorkOrder')) {
+                        this.allWorkOrders.push(q);
+                    }
+                }
+
+                const char = this.dataLoader.characterData;
+                this.activeSet = new Set(char.ActiveWorkOrders || []);
+                this.completedSet = new Set(char.CompletedWorkOrders || []);
+                this.industryLevel = char.Skills?.Industry?.Level ?? 0;
+                this.completions = JSON.parse(localStorage.getItem(getWorkOrderCompletionKey()) || '{}');
+
+                // Build set of work order InternalNames that we already own the item for, by looking
+                // at our inventory items' BestowQuest property against each work order's InternalName.
+                this.workOrderItemsOwned = new Set();
+                const inventory = this.dataLoader.itemsData?.Items;
+                if (Array.isArray(inventory) && this.dataLoader.cdnItemsData) {
+                    for (const invItem of inventory) {
+                        const full = this.dataLoader.cdnItemsData[`item_${invItem.TypeID}`];
+                        if (full?.BestowQuest) this.workOrderItemsOwned.add(full.BestowQuest);
+                    }
+                }
+
+                this.render();
+            }
+
+            refreshCompletionsAndRender() {
+                this.completions = JSON.parse(localStorage.getItem(getWorkOrderCompletionKey()) || '{}');
+                // Make sure newly completed ones leave Active and join Completed
+                for (const name of Object.keys(this.completions)) {
+                    this.activeSet.delete(name);
+                    this.completedSet.add(name);
+                }
+                this.render();
+            }
+
+            getIndustryRequirement(q) {
+                if (!Array.isArray(q.Requirements)) return 0;
+                for (const r of q.Requirements) {
+                    if (r.T === 'MinSkillLevel' && r.Skill === 'Industry') return r.Level || 0;
+                }
+                return 0;
+            }
+
+            getWorkOrderGold(q) {
+                if (!Array.isArray(q.Rewards)) return 0;
+                for (const r of q.Rewards) {
+                    if (r.T === 'WorkOrderCurrency') return r.Amount || 0;
+                }
+                return 0;
+            }
+
+            getCollectObjective(q) {
+                if (!Array.isArray(q.Objectives)) return null;
+                for (const o of q.Objectives) {
+                    if (o.Type === 'Collect') {
+                        const item = this.itemsByInternalName[o.ItemName] || null;
+                        return {
+                            itemInternalName: o.ItemName,
+                            itemDisplayName: item?.Name || o.ItemName,
+                            iconId: item?.IconId || null,
+                            number: o.Number || 1,
+                            description: o.Description || ''
+                        };
+                    }
+                }
+                return null;
+            }
+
+            parseArea(description) {
+                if (!description) return null;
+                const m = /Deliver\s+\d+\s+.+?\s+to\s+.+?\s+(?:in|on)(?:\s+the)?\s+([^.]+?)(?:\s+docks)?\s*\./i.exec(description);
+                return m ? m[1].trim() : null;
+            }
+
+            displaySkill(q) {
+                const s = q.WorkOrderSkill;
+                if (!s || s === 'Unknown') return 'Generic';
+                return s;
+            }
+
+            matchesQuery(q, query) {
+                if (!query) return true;
+                const lower = query.toLowerCase();
+                if (q.Name?.toLowerCase().includes(lower)) return true;
+                if (q.Description?.toLowerCase().includes(lower)) return true;
+                if (q.InternalName?.toLowerCase().includes(lower)) return true;
+                if (this.displaySkill(q).toLowerCase().includes(lower)) return true;
+                const area = this.parseArea(q.Description);
+                if (area && area.toLowerCase().includes(lower)) return true;
+                const collect = this.getCollectObjective(q);
+                if (collect?.itemInternalName?.toLowerCase().includes(lower)) return true;
+                if (collect?.itemDisplayName?.toLowerCase().includes(lower)) return true;
+                return false;
+            }
+
+            categorize() {
+                const active = [];
+                const completed = [];
+                const available = [];
+                for (const q of this.allWorkOrders) {
+                    const name = q.InternalName;
+                    if (this.activeSet.has(name)) {
+                        active.push(q);
+                    } else if (this.completedSet.has(name) || this.completions[name]) {
+                        completed.push(q);
+                    } else {
+                        available.push(q);
+                    }
+                }
+                const nameSort = (a, b) => (a.Name || '').localeCompare(b.Name || '');
+                const reqSort = (a, b) => {
+                    const ra = this.getIndustryRequirement(a);
+                    const rb = this.getIndustryRequirement(b);
+                    if (ra !== rb) return ra - rb;
+                    return nameSort(a, b);
+                };
+                active.sort(reqSort);
+                available.sort(reqSort);
+                // Completed: timer-known first (ascending remaining ms), then unknown-availability sorted by name
+                completed.sort((a, b) => {
+                    const ca = this.formatCooldown(a);
+                    const cb = this.formatCooldown(b);
+                    const hasA = ca.remainingMs !== null;
+                    const hasB = cb.remainingMs !== null;
+                    if (hasA !== hasB) return hasA ? -1 : 1;
+                    if (hasA) return ca.remainingMs - cb.remainingMs;
+                    return nameSort(a, b);
+                });
+                return { active, completed, available };
+            }
+
+            formatRemaining(ms) {
+                if (ms <= 0) return 'now';
+                const days = Math.floor(ms / 86400000);
+                const hours = Math.floor((ms % 86400000) / 3600000);
+                const minutes = Math.floor((ms % 3600000) / 60000);
+                const parts = [];
+                if (days) parts.push(`${days}d`);
+                if (hours) parts.push(`${hours}h`);
+                // Only show minutes when under a day out (keeps long-range readouts tight)
+                if (!days && minutes) parts.push(`${minutes}m`);
+                if (parts.length === 0) return '<1m';
+                return parts.join(' ');
+            }
+
+            formatCooldown(q) {
+                const completedAt = this.completions[q.InternalName];
+                const days = q.ReuseTime_Days || 30;
+                if (!completedAt) {
+                    return { text: 'Availability unknown', state: 'unknown', remainingMs: null };
+                }
+                const readyAt = completedAt + days * 86400000;
+                const remainingMs = readyAt - Date.now();
+                if (remainingMs <= 0) return { text: 'Available now', state: 'ready', remainingMs: 0 };
+                return { text: `Available in ${this.formatRemaining(remainingMs)}`, state: 'cooldown', remainingMs };
+            }
+
+            renderCompactRow(q, section) {
+                const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                const collect = this.getCollectObjective(q);
+                const gold = this.getWorkOrderGold(q);
+                const industryReq = this.getIndustryRequirement(q);
+                const iconBase = this.dataLoader.cdnBaseUrl.replace('/data/', '/icons/');
+                const area = this.parseArea(q.Description);
+
+                const itemIconHtml = collect?.iconId
+                    ? `<img class="obj-item-icon" src="${iconBase}icon_${collect.iconId}.png" alt="" loading="lazy" onerror="this.style.display='none'">`
+                    : '';
+
+                let cooldownCell = '';
+                if (section === 'completed') {
+                    const cd = this.formatCooldown(q);
+                    // Compact: drop "Available in " / "Availability " prefix so the pill fits its column
+                    const shortText = cd.state === 'unknown'
+                        ? 'Unknown'
+                        : cd.state === 'ready'
+                            ? 'Ready'
+                            : cd.text.replace(/^Available in\s*/, '');
+                    cooldownCell = `<span class="wo-cooldown wo-cooldown-${cd.state}">⏳ ${esc(shortText)}</span>`;
+                }
+
+                const itemName = collect ? esc(collect.itemDisplayName) : '—';
+                const qty = collect ? `×${collect.number}` : '';
+                const itemClickAttrs = collect
+                    ? ` class="wo-col wo-col-item wo-item-link" data-wo-internal="${esc(collect.itemInternalName)}" data-wo-display="${esc(collect.itemDisplayName)}" data-wo-qty="${collect.number}" title="Click to see where this item is stored"`
+                    : ` class="wo-col wo-col-item"`;
+
+                return `
+                    <div class="quest-card wo-row wo-row-${section}" title="${esc(q.Description || '')}">
+                        <div class="wo-col wo-col-title"><strong>${esc(q.Name || q.InternalName)}</strong></div>
+                        <div class="wo-col wo-col-skill"><span class="wo-skill-tag">${esc(this.displaySkill(q))}</span></div>
+                        <div class="wo-col wo-col-area">${area ? `<span class="wo-area-tag">📍 ${esc(area)}</span>` : ''}</div>
+                        <div${itemClickAttrs}>${itemIconHtml}<span class="wo-col-item-name">${itemName}</span></div>
+                        <div class="wo-col wo-col-qty">${qty}</div>
+                        <div class="wo-col wo-col-gold">${gold ? `💰 ${gold.toLocaleString()}` : ''}</div>
+                        <div class="wo-col wo-col-industry">${(section === 'available' || industryReq > 0) ? `🏭 Lv ${industryReq}` : ''}</div>
+                        <div class="wo-col wo-col-cooldown">${cooldownCell}</div>
+                    </div>
+                `;
+            }
+
+            renderCard(q, section) {
+                if (this.compact) return this.renderCompactRow(q, section);
+                const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                const collect = this.getCollectObjective(q);
+                const gold = this.getWorkOrderGold(q);
+                const industryReq = this.getIndustryRequirement(q);
+                const iconBase = this.dataLoader.cdnBaseUrl.replace('/data/', '/icons/');
+                const area = this.parseArea(q.Description);
+
+                let itemIconHtml = '';
+                if (collect?.iconId) {
+                    itemIconHtml = `<img class="obj-item-icon" src="${iconBase}icon_${collect.iconId}.png" alt="${esc(collect.itemDisplayName)}" loading="lazy" onerror="this.style.display='none'">`;
+                }
+
+                const collectHtml = collect
+                    ? `<div class="wo-objective wo-item-link" data-wo-internal="${esc(collect.itemInternalName)}" data-wo-display="${esc(collect.itemDisplayName)}" data-wo-qty="${collect.number}" title="Click to see where this item is stored">📦 ${itemIconHtml}<strong>${esc(collect.itemDisplayName)}</strong><span class="obj-count"> ×${collect.number}</span></div>`
+                    : '';
+
+                const rewardsBits = [];
+                if (gold) rewardsBits.push(`💰 ${gold.toLocaleString()} Gold`);
+                for (const r of (q.Rewards || [])) {
+                    if (r.T === 'SkillXp') rewardsBits.push(`📈 <strong>${esc(r.Skill)}</strong> +${(r.Xp || 0).toLocaleString()} XP`);
+                }
+                const rewardsHtml = rewardsBits.length
+                    ? `<div class="wo-rewards">${rewardsBits.join(' &nbsp;·&nbsp; ')}</div>`
+                    : '';
+
+                // Always show industry requirement on Available cards so player sees why a filter might hide it
+                const reqHtml = (section === 'available' || industryReq > 0)
+                    ? `<div class="wo-requirement">🏭 Industry Level ${industryReq}</div>`
+                    : '';
+
+                let cooldownHtml = '';
+                if (section === 'completed') {
+                    const cd = this.formatCooldown(q);
+                    cooldownHtml = `<div class="wo-cooldown wo-cooldown-${cd.state}">⏳ ${esc(cd.text)}</div>`;
+                }
+
+                const skillTag = `<span class="wo-skill-tag">${esc(this.displaySkill(q))}</span>`;
+                const areaTag = area
+                    ? `<span class="wo-area-tag" title="${esc(area)}">📍 ${esc(area)}</span>`
+                    : '';
+
+                return `
+                    <div class="quest-card wo-card wo-card-${section}">
+                        <div class="quest-header">
+                            <div>
+                                <div class="quest-title">${esc(q.Name || q.InternalName)} ${skillTag} ${areaTag}</div>
+                            </div>
+                        </div>
+                        <div class="quest-description">${esc(q.Description || '')}</div>
+                        ${collectHtml}
+                        <div class="wo-meta">
+                            ${reqHtml}
+                            ${rewardsHtml}
+                            ${cooldownHtml}
+                        </div>
+                    </div>
+                `;
+            }
+
+            search(section, query) {
+                this.searchQueries[section] = query || '';
+                this.renderSection(section);
+            }
+
+            renderSection(section) {
+                const cap = section.charAt(0).toUpperCase() + section.slice(1);
+                const cats = this.categorize();
+                let list = cats[section] || [];
+                const total = list.length;
+
+                // Apply Available-specific filters (industry level, items-owned)
+                if (section === 'available') {
+                    if (this.filters.industry) {
+                        list = list.filter(q => this.getIndustryRequirement(q) <= this.industryLevel);
+                    }
+                    if (this.filters.items) {
+                        list = list.filter(q => this.workOrderItemsOwned.has(q.InternalName));
+                    }
+                }
+
+                const filtered = list.filter(q => this.matchesQuery(q, this.searchQueries[section]));
+                const listEl = document.getElementById(`wo${cap}List`);
+                const sectionEl = document.getElementById(`wo${cap}Section`);
+                const countEl = document.getElementById(`wo${cap}SectionCount`);
+                if (!listEl || !sectionEl) return;
+
+                if (total === 0) {
+                    sectionEl.style.display = 'none';
+                    return;
+                }
+                sectionEl.style.display = 'block';
+                if (countEl) {
+                    countEl.textContent = filtered.length === total
+                        ? `${total}`
+                        : `${filtered.length} / ${total}`;
+                }
+                if (filtered.length === 0) {
+                    const msg = section === 'available' && (this.filters.industry || this.filters.items)
+                        ? 'No work orders match the active filters.'
+                        : 'No work orders match your search.';
+                    listEl.innerHTML = `<div class="wo-empty">${msg}</div>`;
+                } else {
+                    listEl.innerHTML = filtered.map(q => this.renderCard(q, section)).join('');
+                }
+            }
+
+            render() {
+                const cats = this.categorize();
+
+                document.getElementById('woCompletedCount').textContent = cats.completed.length;
+                document.getElementById('woActiveCount').textContent = cats.active.length;
+                document.getElementById('woAvailableCount').textContent = cats.available.length;
+                document.getElementById('woIndustryLevel').textContent = this.industryLevel;
+                document.getElementById('workOrderStats').style.display = 'grid';
+
+                this.renderSection('active');
+                this.renderSection('available');
+                this.renderSection('completed');
+
+                this._applyAccordionState();
+                this.attachAccordionHandlers();
+                this._applyFiltersToUI();
+                this.attachFilterHandlers();
+                this._applyCompactUI();
+                this.attachCompactHandler();
+                this.attachItemLinkHandler();
+            }
+
+            attachItemLinkHandler() {
+                if (this._itemLinkAttached) return;
+                const root = document.getElementById('workorders');
+                if (!root) return;
+                root.addEventListener('click', (e) => {
+                    const link = e.target.closest('.wo-item-link');
+                    if (!link) return;
+                    const internal = link.getAttribute('data-wo-internal');
+                    const display = link.getAttribute('data-wo-display');
+                    const qty = parseInt(link.getAttribute('data-wo-qty') || '0', 10) || null;
+                    if (internal) showWorkOrderItemLocations(internal, display, qty);
+                });
+                this._itemLinkAttached = true;
             }
         }
 
@@ -2646,6 +3216,68 @@
             modal.style.display = 'flex';
         }
 
+        function showWorkOrderItemLocations(internalName, displayName, requiredQty) {
+            const modal = document.getElementById('woItemLocationsModal');
+            const titleEl = document.getElementById('woItemLocationsModalTitle');
+            const body = document.getElementById('woItemLocationsModalBody');
+            titleEl.textContent = `Locations — ${displayName}`;
+
+            const items = inventoryBrowser?.allItems || [];
+            if (!dataLoader.itemsData?.Items?.length) {
+                body.innerHTML = '<p style="padding:16px;color:#6c757d;font-size:0.9em;">Load your inventory data first to find matching items.</p>';
+                modal.style.display = 'flex';
+                return;
+            }
+
+            const matches = items.filter(i => i.details?.InternalName === internalName);
+            if (!matches.length) {
+                body.innerHTML = `<p style="padding:16px;color:#6c757d;font-size:0.9em;">No <strong>${displayName}</strong> found in your inventory or storage.</p>`;
+                modal.style.display = 'flex';
+                return;
+            }
+
+            // Group by vault, sum stack sizes, track whether this is carried (inventory) or stored
+            const byVault = {};
+            let total = 0;
+            for (const m of matches) {
+                const key = m.StorageVault || m.vaultName || '?';
+                if (!byVault[key]) {
+                    byVault[key] = { vaultName: m.vaultName || key, isCarried: m.vaultArea === '__inventory__', qty: 0 };
+                }
+                byVault[key].qty += m.StackSize || 1;
+                total += m.StackSize || 1;
+            }
+
+            const rows = Object.values(byVault)
+                .sort((a, b) => {
+                    if (a.isCarried !== b.isCarried) return a.isCarried ? -1 : 1;
+                    return b.qty - a.qty;
+                })
+                .map(v => `
+                    <tr>
+                        <td>${v.isCarried ? '🎒 ' : '📦 '}${v.vaultName}</td>
+                        <td style="text-align:right;">×${v.qty.toLocaleString()}</td>
+                    </tr>
+                `).join('');
+
+            const neededNote = requiredQty
+                ? `<div class="wo-locations-summary ${total >= requiredQty ? 'wo-locations-enough' : 'wo-locations-short'}">
+                    ${total >= requiredQty
+                        ? `✓ You have <strong>${total.toLocaleString()}</strong> (need ${requiredQty})`
+                        : `⚠️ You have <strong>${total.toLocaleString()}</strong> — need ${requiredQty} (short ${requiredQty - total})`}
+                   </div>`
+                : `<div class="wo-locations-summary">Total on hand: <strong>${total.toLocaleString()}</strong></div>`;
+
+            body.innerHTML = `
+                ${neededNote}
+                <table class="favor-items-table">
+                    <thead><tr><th>Location</th><th style="text-align:right;">Quantity</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+            modal.style.display = 'flex';
+        }
+
         // ── Quest Ready for Turn-In helpers ──────────────────────────────────
         function showDuplicateItemsModal() {
             const modal = document.getElementById('duplicateItemsModal');
@@ -2800,6 +3432,7 @@
         const RE_VENDOR_SCREEN     = /LocalPlayer: ProcessVendorScreen\((\d+), (\w+), (\d+), (\d+), (\d+), "([^"]*)"/;
         const RE_VENDOR_UPDATE     = /LocalPlayer: ProcessVendorUpdateAvailableGold\((\d+), (\d+), (\d+)\)/; // params: remaining, resetAt, cap
         const RE_TALK_SCREEN       = /LocalPlayer: ProcessTalkScreen\(\d+, "[^"]*", "(<h1>Shops Selling [^"]+)", "/;
+        const RE_COMPLETE_QUEST    = /LocalPlayer: ProcessCompleteQuest\(\d+, (\d+)\)/;
 
         // Parse the HTML content string from a ProcessTalkScreen "Shops Selling" line.
         // The content uses literal \n / \t escape sequences (two chars each) as it appears on one log line.
@@ -2998,6 +3631,25 @@
                                 capture
                             );
                             storeBrowser.applyVendorCaptures({ [id]: capture });
+                        }
+
+                        // Detect work order completion → record timestamp for cooldown tracking
+                        const cm = RE_COMPLETE_QUEST.exec(line);
+                        if (cm) {
+                            const questId = parseInt(cm[1]);
+                            const internalName = dataLoader.questIdToInternalName?.[questId];
+                            const q = internalName ? dataLoader.questsData?.[internalName] : null;
+                            if (q && Array.isArray(q.Keywords) && q.Keywords.includes('WorkOrder')) {
+                                const key = getWorkOrderCompletionKey();
+                                const map = JSON.parse(localStorage.getItem(key) || '{}');
+                                map[internalName] = Date.now();
+                                localStorage.setItem(key, JSON.stringify(map));
+                                console.log(`[workorder] Completed ${internalName} (quest ${questId})`);
+                                if (typeof workOrderBrowser !== 'undefined' && workOrderBrowser.allWorkOrders.length) {
+                                    workOrderBrowser.refreshCompletionsAndRender();
+                                }
+                            }
+                            continue;
                         }
 
                         // Parse vendor gold update events — params are (remaining, resetAt, cap), no npcId
@@ -3604,6 +4256,7 @@
 
         let dataLoader = new DataLoader();
         let questBrowser = new QuestBrowser(dataLoader);
+        let workOrderBrowser = new WorkOrderBrowser(dataLoader);
         let inventoryBrowser = new InventoryBrowser(dataLoader);
         let storeBrowser = new StoreBrowser(dataLoader);
         let vendorPriceTracker = new VendorPriceTracker();
@@ -3655,6 +4308,7 @@
                 showStatus(`✓ Loaded ${dataLoader.characterData.Character}'s data with ${dataLoader.characterData.ActiveQuests.length} active quests`, 'success');
 
                 await questBrowser.initialize();
+                await workOrderBrowser.initialize();
                 storeBrowser.initialize();
             } catch (error) {
                 showStatus(`✗ Error: ${error.message}`, 'error');
@@ -3776,6 +4430,7 @@
                 await dataLoader.loadInventoryData();
 
                 await questBrowser.initialize();
+                await workOrderBrowser.initialize();
                 await inventoryBrowser.initialize();
                 storeBrowser.initialize();
                 questBrowser.render();
@@ -3820,6 +4475,7 @@
 
                 // Initialize all browsers
                 await questBrowser.initialize();
+                await workOrderBrowser.initialize();
                 await inventoryBrowser.initialize();
                 storeBrowser.initialize();
                 if (questBrowser.allQuests.length) questBrowser.render();
@@ -3860,7 +4516,7 @@
         // Handle hash changes (browser back/forward)
         function handleHashChange() {
             const hash = window.location.hash.slice(1); // Remove '#'
-            const validTabs = ['quests', 'inventory', 'stores', 'prices', 'maps'];
+            const validTabs = ['quests', 'workorders', 'inventory', 'stores', 'prices', 'maps'];
 
             if (hash && validTabs.includes(hash)) {
                 switchTab(hash, false); // Don't update hash again to avoid loop
@@ -3870,7 +4526,7 @@
         // Initialize tab from URL hash on page load
         function initializeTabFromHash() {
             const hash = window.location.hash.slice(1);
-            const validTabs = ['quests', 'inventory', 'stores', 'prices', 'maps'];
+            const validTabs = ['quests', 'workorders', 'inventory', 'stores', 'prices', 'maps'];
 
             if (hash && validTabs.includes(hash)) {
                 switchTab(hash, false);
@@ -3894,6 +4550,16 @@
 
         document.getElementById('questSearch').addEventListener('input', (e) => {
             questBrowser.search(e.target.value);
+        });
+
+        document.getElementById('woActiveSearch').addEventListener('input', (e) => {
+            workOrderBrowser.search('active', e.target.value);
+        });
+        document.getElementById('woAvailableSearch').addEventListener('input', (e) => {
+            workOrderBrowser.search('available', e.target.value);
+        });
+        document.getElementById('woCompletedSearch').addEventListener('input', (e) => {
+            workOrderBrowser.search('completed', e.target.value);
         });
 
         document.getElementById('inventorySearch').addEventListener('input', (e) => {
@@ -4109,6 +4775,17 @@
                 <button class="price-modal-close" onclick="document.getElementById('favorItemsModal').style.display='none'">✕</button>
             </div>
             <div class="favor-items-modal-body" id="favorItemsModalBody"></div>
+        </div>
+    </div>
+
+    <!-- Work Order Item Locations modal -->
+    <div id="woItemLocationsModal" class="tracker-modal-overlay" style="display:none;" onclick="if(event.target===this)this.style.display='none'">
+        <div class="favor-items-modal">
+            <div class="price-modal-header">
+                <span class="price-modal-title" id="woItemLocationsModalTitle">Item Locations</span>
+                <button class="price-modal-close" onclick="document.getElementById('woItemLocationsModal').style.display='none'">✕</button>
+            </div>
+            <div class="favor-items-modal-body" id="woItemLocationsModalBody"></div>
         </div>
     </div>
 

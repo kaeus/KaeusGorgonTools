@@ -146,7 +146,8 @@ header p {
 }
 
 .quest-browser,
-.inventory-browser {
+.inventory-browser,
+.work-order-browser {
     padding: 30px;
 }
 
@@ -4629,4 +4630,436 @@ html[data-theme="dark"] .fight-history-table .dps-empty-cell {
 html[data-theme="dark"] .tp-controls {
     background: #252540;
     border-bottom-color: #3a3a5a;
+}
+
+/* ===== Work Orders tab ===== */
+.wo-section {
+    margin-bottom: 20px;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    overflow: hidden;
+    background: white;
+}
+
+.wo-section-body {
+    padding: 20px;
+    background: #fafbfc;
+}
+
+.wo-section-body .search-bar {
+    margin-bottom: 16px;
+}
+
+.wo-section .quest-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.wo-card {
+    margin: 0;
+    padding: 16px 18px;
+}
+
+.wo-skill-tag {
+    display: inline-block;
+    background: #eef2ff;
+    color: #4a5bc4;
+    font-size: 0.75em;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 8px;
+    vertical-align: middle;
+    font-weight: 500;
+}
+
+.wo-area-tag {
+    display: inline-block;
+    background: #fff4e0;
+    color: #a0632a;
+    font-size: 0.75em;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 6px;
+    vertical-align: middle;
+    font-weight: 500;
+}
+
+.wo-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 14px;
+    padding: 10px 14px;
+    background: #eef2ff;
+    border-radius: 6px;
+    border: 1px solid #dde3f8;
+}
+
+.wo-view-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    margin-bottom: 14px;
+    padding: 8px 12px;
+    background: #f3f5fb;
+    border-radius: 6px;
+    border: 1px solid #e2e6ef;
+}
+
+/* ---- Compact (single-row) layout ---- */
+#workorders.wo-compact .wo-section .quest-list {
+    gap: 4px;
+}
+
+#workorders.wo-compact .wo-row {
+    display: grid;
+    grid-template-columns:
+        minmax(180px, 1.8fr)   /* title */
+        110px                   /* skill */
+        minmax(120px, 1fr)      /* area */
+        minmax(160px, 1.4fr)    /* item */
+        60px                    /* qty */
+        120px                   /* gold */
+        110px                   /* industry */
+        130px;                  /* cooldown */
+    gap: 10px;
+    align-items: center;
+    padding: 8px 12px;
+    font-size: 0.92em;
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+}
+
+#workorders.wo-compact .wo-row:hover {
+    background: #f8faff;
+    border-color: #dde3f8;
+}
+
+#workorders.wo-compact .wo-col {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#workorders.wo-compact .wo-col-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#workorders.wo-compact .wo-col-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+}
+
+#workorders.wo-compact .wo-col-item .obj-item-icon {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+}
+
+#workorders.wo-compact .wo-col-item-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#workorders.wo-compact .wo-col-qty {
+    text-align: right;
+    color: #555;
+    font-weight: 500;
+}
+
+#workorders.wo-compact .wo-col-gold {
+    color: #2a7a3a;
+    font-weight: 500;
+}
+
+#workorders.wo-compact .wo-col-industry {
+    color: #7355c7;
+    font-weight: 500;
+}
+
+#workorders.wo-compact .wo-skill-tag,
+#workorders.wo-compact .wo-area-tag {
+    margin: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#workorders.wo-compact .wo-col-cooldown {
+    display: flex;
+    justify-content: flex-end;
+    min-width: 0;
+}
+
+#workorders.wo-compact .wo-col-cooldown .wo-cooldown {
+    padding: 2px 8px;
+    font-size: 0.85em;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+    #workorders.wo-compact .wo-row {
+        grid-template-columns:
+            minmax(160px, 1.5fr)
+            100px
+            minmax(120px, 1fr)
+            minmax(140px, 1.2fr)
+            50px
+            100px
+            100px;
+    }
+    #workorders.wo-compact .wo-col-cooldown {
+        grid-column: 1 / -1;
+        text-align: right;
+    }
+}
+
+.wo-filter-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.92em;
+    color: #333;
+    font-weight: 500;
+}
+
+.wo-filter-toggle input[type="checkbox"] {
+    cursor: pointer;
+    margin: 0;
+    accent-color: #667eea;
+}
+
+.wo-objective {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0;
+    font-size: 1em;
+}
+
+.wo-objective .obj-item-icon {
+    width: 24px;
+    height: 24px;
+}
+
+.wo-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: center;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed #e0e0e8;
+    font-size: 0.95em;
+}
+
+.wo-requirement {
+    color: #7355c7;
+    font-weight: 500;
+}
+
+.wo-rewards {
+    color: #2a7a3a;
+    font-weight: 500;
+}
+
+.wo-cooldown {
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-weight: 500;
+}
+
+.wo-cooldown-ready {
+    background: #d4f4d9;
+    color: #1e7a2e;
+}
+
+.wo-cooldown-cooldown {
+    background: #fdeccc;
+    color: #8a5a00;
+}
+
+.wo-cooldown-unknown {
+    background: #ececec;
+    color: #666;
+}
+
+.wo-empty {
+    padding: 16px;
+    text-align: center;
+    color: #888;
+    font-style: italic;
+}
+
+.wo-item-link {
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+}
+
+.wo-item-link:hover {
+    text-decoration: underline;
+    text-decoration-color: #667eea;
+}
+
+.wo-objective.wo-item-link {
+    display: inline-flex;
+    padding: 4px 8px;
+    margin: 6px 0;
+    border-radius: 6px;
+    border: 1px dashed transparent;
+}
+
+.wo-objective.wo-item-link:hover {
+    background: #f1f4ff;
+    border-color: #c6d0ff;
+    text-decoration: none;
+}
+
+.wo-locations-summary {
+    padding: 10px 14px;
+    margin: 0 0 10px 0;
+    border-radius: 6px;
+    font-size: 0.95em;
+    background: #eef2ff;
+    color: #333;
+}
+
+.wo-locations-summary.wo-locations-enough {
+    background: #d4f4d9;
+    color: #1e7a2e;
+}
+
+.wo-locations-summary.wo-locations-short {
+    background: #fdeccc;
+    color: #8a5a00;
+}
+
+.wo-card-completed {
+    opacity: 0.85;
+}
+
+/* Dark mode — Work Orders */
+html[data-theme="dark"] .wo-section {
+    background: #1e1e2e;
+    border-color: #3a3a5a;
+}
+
+html[data-theme="dark"] .wo-section-body {
+    background: #1a1a2a;
+}
+
+html[data-theme="dark"] .wo-card {
+    background: #252540;
+    border-color: #3a3a5a;
+    color: #e0e0f0;
+}
+
+html[data-theme="dark"] .wo-skill-tag {
+    background: #252a60;
+    color: #a0b4ff;
+}
+
+html[data-theme="dark"] .wo-area-tag {
+    background: #3a2a15;
+    color: #e0b080;
+}
+
+html[data-theme="dark"] .wo-filter-bar {
+    background: #1e2240;
+    border-color: #3a3a5a;
+}
+
+html[data-theme="dark"] .wo-filter-toggle {
+    color: #c0c0e0;
+}
+
+html[data-theme="dark"] .wo-view-toolbar {
+    background: #1e2240;
+    border-color: #3a3a5a;
+}
+
+html[data-theme="dark"] #workorders.wo-compact .wo-row {
+    background: #252540;
+    border-color: #3a3a5a;
+    color: #e0e0f0;
+}
+
+html[data-theme="dark"] #workorders.wo-compact .wo-row:hover {
+    background: #2a2a50;
+    border-color: #4a4a7a;
+}
+
+html[data-theme="dark"] #workorders.wo-compact .wo-col-qty {
+    color: #c0c0e0;
+}
+
+html[data-theme="dark"] #workorders.wo-compact .wo-col-gold {
+    color: #7ed898;
+}
+
+html[data-theme="dark"] #workorders.wo-compact .wo-col-industry {
+    color: #b090ff;
+}
+
+html[data-theme="dark"] .wo-meta {
+    border-top-color: #3a3a5a;
+}
+
+html[data-theme="dark"] .wo-requirement {
+    color: #b090ff;
+}
+
+html[data-theme="dark"] .wo-rewards {
+    color: #7ed898;
+}
+
+html[data-theme="dark"] .wo-cooldown-ready {
+    background: #1e3a24;
+    color: #7ed898;
+}
+
+html[data-theme="dark"] .wo-cooldown-cooldown {
+    background: #3d2f15;
+    color: #f2c97a;
+}
+
+html[data-theme="dark"] .wo-cooldown-unknown {
+    background: #2a2a3a;
+    color: #9090b0;
+}
+
+html[data-theme="dark"] .wo-empty {
+    color: #8888aa;
+}
+
+html[data-theme="dark"] .wo-objective.wo-item-link:hover {
+    background: #252a60;
+    border-color: #4a5bc4;
+}
+
+html[data-theme="dark"] .wo-locations-summary {
+    background: #1e2240;
+    color: #e0e0f0;
+}
+
+html[data-theme="dark"] .wo-locations-summary.wo-locations-enough {
+    background: #1e3a24;
+    color: #7ed898;
+}
+
+html[data-theme="dark"] .wo-locations-summary.wo-locations-short {
+    background: #3d2f15;
+    color: #f2c97a;
 }
