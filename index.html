@@ -203,6 +203,17 @@
 
             <div id="storageOverview" style="display: none;"></div>
 
+            <div id="invToolbar" class="inv-multichar-row" style="display:none;">
+                <span id="invMultiCharGroup" class="inv-toolbar-group" style="display:none;">
+                    <input type="checkbox" id="invIncludeAll">
+                    <label for="invIncludeAll">Include all characters on this server</label>
+                </span>
+                <label class="inv-filter-toggle" title="Compact single-row layout">
+                    <input type="checkbox" id="invCompactToggle"> Compact view
+                </label>
+                <span id="invMultiCharHint" class="inv-multichar-hint"></span>
+            </div>
+
             <div id="inventorySearchBar" class="search-bar" style="display: none;">
                 <input type="text" id="inventorySearch" placeholder="🔍 Search items by name...">
             </div>
@@ -445,6 +456,66 @@
                 });
             }
 
+            // Scan reports dir for the latest *_items_*.json per character on the same
+            // server as the current character. Returns a flat array of items, each tagged
+            // with _charBaseName / _charName / _charServer.
+            async loadAllCharacterItemsFromDirectory(dirHandle) {
+                const reportsDir = this._reportsDir || await this.resolveReportsDir(dirHandle);
+                const currentBase = this._charFileBaseName || '';
+                const currentServer = parseCharacterBaseName(currentBase).server;
+
+                // Pick the latest items file per charBase (filenames are alphabetically sortable by timestamp)
+                const latestPerChar = {};
+                for await (const [name, handle] of reportsDir.entries()) {
+                    if (handle.kind !== 'file' || !name.endsWith('.json')) continue;
+                    const idx = name.indexOf('_items_');
+                    if (idx === -1) continue;
+                    const charBase = name.slice(0, idx);
+                    if (parseCharacterBaseName(charBase).server !== currentServer) continue;
+                    const prev = latestPerChar[charBase];
+                    if (!prev || name > prev.name) latestPerChar[charBase] = { name, handle };
+                }
+
+                // AccountStorage chests (StorageVault contains "AccountStorage") are shared
+                // across every character on the account. Each character's export contains
+                // its own snapshot of the shared chest — only the newest snapshot is current.
+                let mostRecentChar = null;
+                let mostRecentName = '';
+                for (const [charBase, info] of Object.entries(latestPerChar)) {
+                    if (info.name > mostRecentName) {
+                        mostRecentName = info.name;
+                        mostRecentChar = charBase;
+                    }
+                }
+
+                const combined = [];
+                for (const [charBase, { handle }] of Object.entries(latestPerChar)) {
+                    try {
+                        const file = await handle.getFile();
+                        const data = JSON.parse(await file.text());
+                        const parsed = parseCharacterBaseName(charBase);
+                        const charName = parsed.charName || charBase;
+                        const isMostRecent = charBase === mostRecentChar;
+                        if (Array.isArray(data.Items)) {
+                            for (const it of data.Items) {
+                                const isAccountShared = typeof it.StorageVault === 'string' && it.StorageVault.includes('AccountStorage');
+                                if (isAccountShared && !isMostRecent) continue; // dedup shared chests to newest snapshot
+                                combined.push({
+                                    ...it,
+                                    _charBaseName: isAccountShared ? '__all__' : charBase,
+                                    _charName: isAccountShared ? 'All' : charName,
+                                    _charServer: parsed.server,
+                                    _isAccountShared: isAccountShared
+                                });
+                            }
+                        }
+                    } catch (e) {
+                        console.warn(`Failed to load items for ${charBase}:`, e);
+                    }
+                }
+                return combined;
+            }
+
             async loadInventoryData() {
                 // Check in-memory cache first
                 if (this.cdnItemsData && this.storageVaultsData && this.areasData) {
@@ -682,15 +753,21 @@
 
                 const TURNIN_RE = /^(Talk to|Return to|Speak with|Speak to)/i;
 
+                // Quests belong to the active character — count their own items plus
+                // anything in shared account chests; skip items locked on alts.
+                const ownItems = inventoryBrowser.includeAllCharacters
+                    ? inventoryBrowser.allItems.filter(i => i._isAccessible)
+                    : inventoryBrowser.allItems;
+
                 // Pre-build item totals by name for fast lookup
                 const itemTotals = {};
-                for (const item of inventoryBrowser.allItems) {
+                for (const item of ownItems) {
                     const name = item.Name;
                     if (!name) continue;
                     if (!itemTotals[name]) itemTotals[name] = { total: 0, perVault: {} };
                     itemTotals[name].total += item.StackSize || 1;
                     if (!itemTotals[name].perVault[item.StorageVault]) {
-                        itemTotals[name].perVault[item.StorageVault] = { vaultName: item.vaultName, qty: 0 };
+                        itemTotals[name].perVault[item.StorageVault] = { vaultName: item.baseVaultName || item.vaultName, qty: 0 };
                     }
                     itemTotals[name].perVault[item.StorageVault].qty += item.StackSize || 1;
                 }
@@ -1713,26 +1790,89 @@
                 this.dataLoader = dataLoader;
                 this.allItems = [];
                 this.filteredItems = [];
+                this.includeAllCharacters = localStorage.getItem('gorgon-inv-include-all') === '1';
+                this.compact = localStorage.getItem('gorgon-inv-compact') === '1';
+            }
+
+            async setIncludeAll(flag) {
+                this.includeAllCharacters = !!flag;
+                localStorage.setItem('gorgon-inv-include-all', flag ? '1' : '0');
+                await this.initialize();
+            }
+
+            setCompact(flag) {
+                this.compact = !!flag;
+                localStorage.setItem('gorgon-inv-compact', flag ? '1' : '0');
+                this._applyCompactUI();
+                this.render();
+            }
+
+            _applyCompactUI() {
+                const root = document.getElementById('inventory');
+                if (root) root.classList.toggle('inv-compact', !!this.compact);
+                const cb = document.getElementById('invCompactToggle');
+                if (cb) cb.checked = !!this.compact;
             }
 
             async initialize() {
-                if (!this.dataLoader.itemsData || !this.dataLoader.cdnItemsData) {
-                    return;
+                if (!this.dataLoader.cdnItemsData) return;
+
+                const currentBase = this.dataLoader._charFileBaseName || '';
+                const currentParsed = parseCharacterBaseName(currentBase);
+                const currentName = currentParsed.charName || currentBase;
+
+                // Resolve raw items list — either multi-character (same server) or single character
+                let rawItems = null;
+                if (this.includeAllCharacters && typeof reportsDirectoryHandle !== 'undefined' && reportsDirectoryHandle) {
+                    try {
+                        rawItems = await this.dataLoader.loadAllCharacterItemsFromDirectory(reportsDirectoryHandle);
+                    } catch (e) {
+                        console.warn('Multi-char inventory load failed, falling back to single character:', e);
+                        rawItems = null;
+                    }
+                }
+                if (!rawItems) {
+                    if (!this.dataLoader.itemsData) return;
+                    rawItems = this.dataLoader.itemsData.Items.map(it => ({
+                        ...it,
+                        _charBaseName: currentBase,
+                        _charName: currentName,
+                        _charServer: currentParsed.server
+                    }));
                 }
 
-                // Build item list with details
-                this.allItems = this.dataLoader.itemsData.Items.map(item => {
+                const multi = this.includeAllCharacters;
+
+                this.allItems = rawItems.map(item => {
                     const itemDetails = this.dataLoader.getItemDetails(item.TypeID);
                     const vaultKey = item.StorageVault;
                     const isPersonal = item.IsInInventory == true || vaultKey === 'Saddlebag';
-                    const vaultName = isPersonal
+                    const baseVaultName = isPersonal
                         ? (vaultKey === 'Saddlebag' ? 'Saddlebag' : 'Character Inventory')
                         : this.dataLoader.getVaultName(vaultKey);
                     const rawArea = isPersonal ? null : this.dataLoader.getVaultArea(vaultKey);
                     const vaultArea = isPersonal ? '__inventory__'
                         : rawArea === '*' ? '__portable__'
                         : rawArea || '__unknown__';
-                    return { ...item, details: itemDetails, vaultName, vaultArea };
+                    // In multi-char mode, append the character name so each character's
+                    // physical storage at NPC X is grouped/displayed separately.
+                    // Same-NPC vaults are merged across characters in multi-char mode;
+                    // the per-card character badge identifies the owner of each item.
+                    const vaultName = baseVaultName;
+                    // Account-shared chests are accessible by every character — even though
+                    // they aren't "owned" by the active character, the active character can
+                    // still draw items from them for quests / work orders.
+                    const isCurrentChar = item._charBaseName === currentBase;
+                    const isAccessible = isCurrentChar || item._isAccountShared === true;
+                    return {
+                        ...item,
+                        details: itemDetails,
+                        vaultName,
+                        baseVaultName,
+                        vaultArea,
+                        _isCurrentChar: isCurrentChar,
+                        _isAccessible: isAccessible
+                    };
                 });
 
                 this.filteredItems = [...this.allItems];
@@ -1744,13 +1884,18 @@
             updateStats() {
                 const totalItems = this.allItems.reduce((sum, item) => sum + 1, 0);
                 const totalValue = this.allItems.reduce((sum, item) => sum + ((item.Value || 0) * (item.StackSize || 1)), 0);
-                const vaultCount = new Set(this.allItems.map(item => item.StorageVault)).size;
+                // In multi-char mode, distinct vaults are scoped per character (one NPC's
+                // storage is physically separate per alt).
+                const vaultKeyOf = (i) => this.includeAllCharacters
+                    ? `${i._charBaseName}::${i.StorageVault}`
+                    : i.StorageVault;
+                const vaultCount = new Set(this.allItems.map(vaultKeyOf)).size;
 
                 const storageItems = this.allItems.filter(item => item.vaultArea !== '__inventory__');
                 const byType = {};
                 for (const item of storageItems) {
                     if (!byType[item.TypeID]) byType[item.TypeID] = new Set();
-                    byType[item.TypeID].add(item.StorageVault);
+                    byType[item.TypeID].add(vaultKeyOf(item));
                 }
                 const duplicateCount = Object.values(byType).filter(vaults => vaults.size >= 2).length;
 
@@ -1764,6 +1909,9 @@
 
                 document.getElementById('inventoryStats').style.display = 'grid';
                 document.getElementById('inventorySearchBar').style.display = 'block';
+                const toolbar = document.getElementById('invToolbar');
+                if (toolbar) toolbar.style.display = 'flex';
+                this._applyCompactUI();
             }
 
             search(query) {
@@ -1772,7 +1920,8 @@
                     return (
                         item.Name?.toLowerCase().includes(lowerQuery) ||
                         item.vaultName?.toLowerCase().includes(lowerQuery) ||
-                        item.details?.Name?.toLowerCase().includes(lowerQuery)
+                        item.details?.Name?.toLowerCase().includes(lowerQuery) ||
+                        (this.includeAllCharacters && item._charName?.toLowerCase().includes(lowerQuery))
                     );
                 });
                 this.render();
@@ -1792,17 +1941,22 @@
                     return;
                 }
 
-                // Group by area, then by vault within each area
-                // Also track vault internal key per vault name for capacity lookup
+                // Group by area, then by vault within each area. In multi-char mode a single
+                // vault accordion can hold items from multiple characters — capacity numbers
+                // are still computed against the active character's favor / shared chest.
                 const byArea = {};
-                const vaultInternalKey = {}; // vaultName → StorageVault key
+                const vaultMeta = {}; // vaultName → { key, isAccountShared }
+                const currentBase = this.dataLoader._charFileBaseName || '';
                 for (const item of this.filteredItems) {
                     const area = item.vaultArea || '__unknown__';
                     const vault = item.vaultName || 'Unknown';
                     if (!byArea[area]) byArea[area] = {};
                     if (!byArea[area][vault]) byArea[area][vault] = [];
                     byArea[area][vault].push(item);
-                    if (item.StorageVault && !vaultInternalKey[vault]) vaultInternalKey[vault] = item.StorageVault;
+                    if (item.StorageVault) {
+                        if (!vaultMeta[vault]) vaultMeta[vault] = { key: item.StorageVault, isAccountShared: false };
+                        if (item._isAccountShared) vaultMeta[vault].isAccountShared = true;
+                    }
                 }
 
                 // Compute capacity per vault internal key (based on current favor)
@@ -1829,10 +1983,15 @@
                     }
                 }
 
-                // True used count per vault from all items (not filtered)
-                const vaultUsed = {}; // StorageVault key → count
+                // True used count per (character, vault) from all items (not filtered).
+                // In single-char mode the charBase is constant so this collapses to vault-only.
+                const vaultUsed = {};
+                const usedKeyOf = (charBase, storageVault) => `${charBase}::${storageVault}`;
                 for (const item of this.allItems) {
-                    if (item.StorageVault) vaultUsed[item.StorageVault] = (vaultUsed[item.StorageVault] || 0) + 1;
+                    if (item.StorageVault) {
+                        const k = usedKeyOf(item._charBaseName, item.StorageVault);
+                        vaultUsed[k] = (vaultUsed[k] || 0) + 1;
+                    }
                 }
 
                 const prettyArea = key => {
@@ -1862,9 +2021,17 @@
                     const vaultHtml = Object.entries(vaults)
                         .sort(([a], [b]) => a.localeCompare(b))
                         .map(([vault, items]) => {
-                            const iKey = vaultInternalKey[vault];
-                            const cap = iKey != null ? vaultCapacity[iKey] : undefined;
-                            const empty = cap != null ? cap - (vaultUsed[iKey] || 0) : null;
+                            const meta = vaultMeta[vault];
+                            const iKey = meta?.key;
+                            // Capacity lookup uses the active character's favor at the NPC
+                            // (or the account-shared snapshot for shared chests). In multi-char
+                            // mode the badge reflects the *active* char's slot availability —
+                            // alts' items occupy physically separate slots.
+                            const cap = (iKey != null) ? vaultCapacity[iKey] : undefined;
+                            const usedCharBase = meta?.isAccountShared ? '__all__' : currentBase;
+                            const empty = cap != null
+                                ? cap - (vaultUsed[usedKeyOf(usedCharBase, iKey)] || 0)
+                                : null;
                             return this.renderVaultAccordion(vault, items, true, empty);
                         })
                         .join('');
@@ -1934,7 +2101,50 @@
                 `;
             }
 
+            // Stable hue per character name → CSS custom properties for badge styling.
+            _charBadgeStyle(charName) {
+                if (!charName) return '';
+                let hash = 0;
+                for (let i = 0; i < charName.length; i++) {
+                    hash = (hash * 31 + charName.charCodeAt(i)) | 0;
+                }
+                const hue = Math.abs(hash) % 360;
+                return `--char-h:${hue};`;
+            }
+
+            renderItemCardCompact(item) {
+                const perItemValue = item.Value || 0;
+                const totalValue = perItemValue * (item.StackSize || 1);
+                const rarity = item.Rarity || '';
+                const rarityClass = rarity ? `rarity-${rarity.toLowerCase()}` : '';
+                const iconId = item.details?.IconId;
+                const iconBase = this.dataLoader.cdnBaseUrl.replace('/data/', '/icons/');
+                const iconHtml = iconId
+                    ? `<img class="item-icon-compact" src="${iconBase}icon_${iconId}.png" alt="" loading="lazy" onerror="this.style.display='none'">`
+                    : '<span class="item-icon-compact"></span>';
+                const charCell = this.includeAllCharacters && item._charName
+                    ? `<span class="item-char-chip" style="${this._charBadgeStyle(item._charName)}">${item._charName}</span>`
+                    : '';
+                const level = item.RequiredLevel || item.Level || '';
+                const slot = item.EquipSlot || item.Slot || '';
+                const stack = item.StackSize > 1 ? `×${item.StackSize}` : '';
+                const perItemHtml = item.StackSize > 1 ? `${perItemValue.toFixed(1)}g ea` : '';
+                return `
+                    <div class="item-row ${rarityClass}">
+                        <div class="ir-col ir-col-name">${iconHtml}<span class="ir-name">${item.Name || 'Unknown Item'}</span></div>
+                        <div class="ir-col ir-col-char">${charCell}</div>
+                        <div class="ir-col ir-col-rarity">${rarity}</div>
+                        <div class="ir-col ir-col-level">${level ? `Lvl ${level}` : ''}</div>
+                        <div class="ir-col ir-col-slot">${slot}</div>
+                        <div class="ir-col ir-col-stack">${stack}</div>
+                        <div class="ir-col ir-col-peritem">${perItemHtml}</div>
+                        <div class="ir-col ir-col-total">💰 ${totalValue.toLocaleString()}g</div>
+                    </div>
+                `;
+            }
+
             renderItemCard(item) {
+                if (this.compact) return this.renderItemCardCompact(item);
                 const perItemValue = item.Value || 0;
                 const totalValue = perItemValue * (item.StackSize || 1);
 
@@ -1949,6 +2159,10 @@
 
                 // Build details badges
                 const detailBadges = [];
+
+                if (this.includeAllCharacters && item._charName) {
+                    detailBadges.push(`<span class="item-detail-badge item-char-badge" style="${this._charBadgeStyle(item._charName)}">👤 ${item._charName}</span>`);
+                }
 
                 if (rarity) {
                     detailBadges.push(`<span class="item-detail-badge">${rarity}</span>`);
@@ -3222,7 +3436,12 @@
             const body = document.getElementById('woItemLocationsModalBody');
             titleEl.textContent = `Locations — ${displayName}`;
 
-            const items = inventoryBrowser?.allItems || [];
+            const allItems = inventoryBrowser?.allItems || [];
+            // Work orders are per-character — restrict to the active character's items
+            // plus shared account chests; alt-only items are unreachable for this WO.
+            const items = inventoryBrowser?.includeAllCharacters
+                ? allItems.filter(i => i._isAccessible)
+                : allItems;
             if (!dataLoader.itemsData?.Items?.length) {
                 body.innerHTML = '<p style="padding:16px;color:#6c757d;font-size:0.9em;">Load your inventory data first to find matching items.</p>';
                 modal.style.display = 'flex';
@@ -3242,7 +3461,7 @@
             for (const m of matches) {
                 const key = m.StorageVault || m.vaultName || '?';
                 if (!byVault[key]) {
-                    byVault[key] = { vaultName: m.vaultName || key, isCarried: m.vaultArea === '__inventory__', qty: 0 };
+                    byVault[key] = { vaultName: m.baseVaultName || m.vaultName || key, isCarried: m.vaultArea === '__inventory__', qty: 0 };
                 }
                 byVault[key].qty += m.StackSize || 1;
                 total += m.StackSize || 1;
@@ -3298,9 +3517,13 @@
                 byType[item.TypeID].push(item);
             }
 
-            // Keep only groups with items in 2+ distinct vaults
+            // Keep only groups with items in 2+ distinct vaults. In multi-char mode,
+            // a vault is scoped to its owning character (so the same NPC's storage on
+            // different alts counts as different physical locations).
+            const multi = inventoryBrowser.includeAllCharacters;
+            const vaultKeyOf = (i) => multi ? `${i._charBaseName}::${i.StorageVault}` : i.StorageVault;
             const duplicates = Object.values(byType).filter(group => {
-                const vaults = new Set(group.map(i => i.StorageVault));
+                const vaults = new Set(group.map(vaultKeyOf));
                 return vaults.size >= 2;
             });
 
@@ -3322,11 +3545,13 @@
                 const iconHtml = iconId
                     ? `<img class="dup-item-icon" src="${iconBase}icon_${iconId}.png" alt="" onerror="this.style.display='none'">`
                     : '';
-                // Consolidate stacks per vault into a single chip with total quantity
+                // Consolidate stacks per vault into a single chip with total quantity.
+                // Vault display name already includes the character in multi-char mode.
                 const vaultTotals = {};
                 for (const i of group) {
-                    if (!vaultTotals[i.StorageVault]) vaultTotals[i.StorageVault] = { name: i.vaultName, qty: 0 };
-                    vaultTotals[i.StorageVault].qty += i.StackSize || 1;
+                    const k = vaultKeyOf(i);
+                    if (!vaultTotals[k]) vaultTotals[k] = { name: i.vaultName, qty: 0 };
+                    vaultTotals[k].qty += i.StackSize || 1;
                 }
                 const chips = Object.values(vaultTotals).map(v =>
                     `<span class="dup-vault-chip">${v.name}<span class="dup-qty"> ×${v.qty}</span></span>`
@@ -4297,6 +4522,35 @@
             row.style.display = 'flex';
         }
 
+        // Show the "Include all characters" cluster only when there are 2+ characters on
+        // the same server as the active character. The Compact toggle in the same toolbar
+        // remains visible regardless.
+        function updateInventoryMultiCharVisibility() {
+            const group = document.getElementById('invMultiCharGroup');
+            const cb = document.getElementById('invIncludeAll');
+            const hint = document.getElementById('invMultiCharHint');
+            if (!group || !cb) return;
+            const currentBase = dataLoader._charFileBaseName || '';
+            const currentServer = parseCharacterBaseName(currentBase).server;
+            const sameServerChars = availableCharacters.filter(c => c.server === currentServer);
+            if (sameServerChars.length >= 2) {
+                group.style.display = 'inline-flex';
+                cb.checked = inventoryBrowser.includeAllCharacters;
+                if (hint) {
+                    hint.textContent = currentServer
+                        ? `${sameServerChars.length} characters on ${currentServer}`
+                        : `${sameServerChars.length} characters`;
+                }
+            } else {
+                group.style.display = 'none';
+                if (hint) hint.textContent = '';
+                // If we previously had multi-char on but no longer have peers, fall back silently.
+                if (inventoryBrowser.includeAllCharacters) {
+                    inventoryBrowser.includeAllCharacters = false;
+                }
+            }
+        }
+
         async function handleCharacterFileLoad(file) {
             try {
                 showStatus('Loading character data...', 'loading');
@@ -4421,6 +4675,9 @@
 
                 // Load the selected character file
                 await dataLoader.loadCharacterFromHandle(charToLoad.handle, charToLoad.baseName);
+
+                // Server is known now (from charBase) — show/hide the multi-char checkbox
+                updateInventoryMultiCharVisibility();
 
                 showStatus('Loading items data from folder...', 'loading');
                 await dataLoader.loadItemsFromDirectory(dirHandle);
@@ -4564,6 +4821,14 @@
 
         document.getElementById('inventorySearch').addEventListener('input', (e) => {
             inventoryBrowser.search(e.target.value);
+        });
+
+        document.getElementById('invIncludeAll').addEventListener('change', async (e) => {
+            await inventoryBrowser.setIncludeAll(e.target.checked);
+        });
+
+        document.getElementById('invCompactToggle').addEventListener('change', (e) => {
+            inventoryBrowser.setCompact(e.target.checked);
         });
 
         document.getElementById('priceSearch').addEventListener('input', (e) => {

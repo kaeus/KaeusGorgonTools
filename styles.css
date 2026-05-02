@@ -993,6 +993,178 @@ header p {
     font-weight: 500;
 }
 
+.item-detail-badge.item-char-badge {
+    --char-h: 210;
+    background: hsl(var(--char-h), 70%, 92%);
+    color: hsl(var(--char-h), 60%, 30%);
+    border: 1px solid hsl(var(--char-h), 60%, 80%);
+}
+
+/* Compact item-row layout (Inventory tab) */
+.inv-toolbar-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding-right: 12px;
+    margin-right: 4px;
+    border-right: 1px solid rgba(0, 0, 0, 0.1);
+}
+html[data-theme="dark"] .inv-toolbar-group {
+    border-right-color: rgba(255, 255, 255, 0.12);
+}
+.inv-filter-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.9em;
+    color: #495057;
+}
+
+#inventory.inv-compact .accordion-quests {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.item-row {
+    display: grid;
+    grid-template-columns:
+        minmax(180px, 2fr)   /* icon + name */
+        110px                 /* char */
+        90px                  /* rarity */
+        70px                  /* level */
+        90px                  /* slot */
+        60px                  /* stack */
+        90px                  /* per-item */
+        110px;                /* total */
+    align-items: center;
+    gap: 10px;
+    padding: 5px 10px;
+    font-size: 0.9em;
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 5px;
+}
+
+.item-row:hover {
+    background: #f8faff;
+    border-color: #dde3f8;
+}
+
+.item-row .ir-col {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.item-row .ir-col-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.item-icon-compact {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    display: inline-block;
+}
+
+.item-row .ir-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.item-row .ir-col-stack,
+.item-row .ir-col-peritem,
+.item-row .ir-col-total {
+    text-align: right;
+}
+
+.item-row .ir-col-peritem {
+    color: #6c757d;
+    font-size: 0.85em;
+}
+
+.item-row .ir-col-total {
+    color: #2a7a3a;
+    font-weight: 500;
+}
+
+.item-row .ir-col-rarity,
+.item-row .ir-col-level,
+.item-row .ir-col-slot {
+    color: #555;
+    font-size: 0.85em;
+}
+
+.item-char-chip {
+    --char-h: 210;
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.8em;
+    font-weight: 500;
+    background: hsl(var(--char-h), 70%, 92%);
+    color: hsl(var(--char-h), 60%, 30%);
+    border: 1px solid hsl(var(--char-h), 60%, 80%);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+    .item-row {
+        grid-template-columns:
+            minmax(160px, 1.6fr)
+            100px
+            80px
+            60px
+            70px
+            50px
+            80px
+            100px;
+        gap: 6px;
+        font-size: 0.85em;
+    }
+}
+
+.inv-multichar-row {
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+}
+.inv-multichar-row label {
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.9em;
+    color: #495057;
+}
+.inv-multichar-hint {
+    font-size: 0.8em;
+    color: #6c757d;
+    margin-left: auto;
+}
+
+html[data-theme="dark"] .inv-multichar-row {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+html[data-theme="dark"] .inv-multichar-row label {
+    color: #c0c0d0;
+}
+html[data-theme="dark"] .inv-multichar-hint {
+    color: #8a8aa0;
+}
+
 /* Rarity-based item coloring */
 .item-card.rarity-uncommon {
     background: linear-gradient(135deg, #d4f4dd 0%, #e8f9ed 100%);
@@ -3820,6 +3992,47 @@ html[data-theme="dark"] .item-value {
 html[data-theme="dark"] .item-detail-badge {
     background: rgba(255, 255, 255, 0.05);
     color: #9090b0;
+}
+
+html[data-theme="dark"] .item-detail-badge.item-char-badge {
+    background: hsl(var(--char-h), 50%, 22%);
+    color: hsl(var(--char-h), 80%, 78%);
+    border-color: hsl(var(--char-h), 50%, 35%);
+}
+
+html[data-theme="dark"] .inv-filter-toggle {
+    color: #c0c0d0;
+}
+
+html[data-theme="dark"] .item-row {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.08);
+    color: #d0d0e0;
+}
+
+html[data-theme="dark"] .item-row:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+html[data-theme="dark"] .item-row .ir-col-peritem {
+    color: #8a8aa0;
+}
+
+html[data-theme="dark"] .item-row .ir-col-total {
+    color: #6cd17e;
+}
+
+html[data-theme="dark"] .item-row .ir-col-rarity,
+html[data-theme="dark"] .item-row .ir-col-level,
+html[data-theme="dark"] .item-row .ir-col-slot {
+    color: #a0a0b0;
+}
+
+html[data-theme="dark"] .item-char-chip {
+    background: hsl(var(--char-h), 50%, 22%);
+    color: hsl(var(--char-h), 80%, 78%);
+    border-color: hsl(var(--char-h), 50%, 35%);
 }
 
 html[data-theme="dark"] .item-details {
