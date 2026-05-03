@@ -1117,6 +1117,38 @@ html[data-theme="dark"] .inv-toolbar-group {
     white-space: nowrap;
 }
 
+/* Bestow-item scrolls — green if the work order is still doable, red if already completed */
+.item-card.wo-target-available {
+    background: linear-gradient(135deg, #d4f4dd 0%, #e8f9ed 100%);
+    border-color: #28a745;
+    box-shadow: 0 0 0 1px rgba(40, 167, 69, 0.15);
+}
+.item-row.wo-target-available {
+    background: #e8f9ed;
+    border-color: #28a745;
+}
+.item-row.wo-target-available:hover {
+    background: #d4f4dd;
+}
+.item-card.wo-target-completed {
+    background: linear-gradient(135deg, #f8d7da 0%, #fce8ea 100%);
+    border-color: #dc3545;
+    box-shadow: 0 0 0 1px rgba(220, 53, 69, 0.15);
+}
+.item-row.wo-target-completed {
+    background: #fce8ea;
+    border-color: #dc3545;
+}
+.item-row.wo-target-completed:hover {
+    background: #f8d7da;
+}
+.wo-target-marker {
+    display: inline-block;
+    margin-left: 4px;
+    font-size: 0.85em;
+    line-height: 1;
+}
+
 @media (max-width: 1100px) {
     .item-row {
         grid-template-columns:
@@ -4033,6 +4065,33 @@ html[data-theme="dark"] .item-char-chip {
     background: hsl(var(--char-h), 50%, 22%);
     color: hsl(var(--char-h), 80%, 78%);
     border-color: hsl(var(--char-h), 50%, 35%);
+}
+
+html[data-theme="dark"] .item-card.wo-target-available {
+    background: linear-gradient(135deg, #14361f 0%, #1c4128 100%);
+    border-color: #3fbf5f;
+    box-shadow: 0 0 0 1px rgba(63, 191, 95, 0.25);
+}
+html[data-theme="dark"] .item-row.wo-target-available {
+    background: rgba(63, 191, 95, 0.15);
+    border-color: #3fbf5f;
+    color: #d8f5df;
+}
+html[data-theme="dark"] .item-row.wo-target-available:hover {
+    background: rgba(63, 191, 95, 0.22);
+}
+html[data-theme="dark"] .item-card.wo-target-completed {
+    background: linear-gradient(135deg, #3a1418 0%, #4a1c22 100%);
+    border-color: #e74c5c;
+    box-shadow: 0 0 0 1px rgba(231, 76, 92, 0.25);
+}
+html[data-theme="dark"] .item-row.wo-target-completed {
+    background: rgba(231, 76, 92, 0.15);
+    border-color: #e74c5c;
+    color: #f5d8dc;
+}
+html[data-theme="dark"] .item-row.wo-target-completed:hover {
+    background: rgba(231, 76, 92, 0.22);
 }
 
 html[data-theme="dark"] .item-details {

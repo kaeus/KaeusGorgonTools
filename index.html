@@ -1488,6 +1488,17 @@
                 return 0;
             }
 
+            // Status of a bestow-item's work order for the active character:
+            //   'completed' — already finished (or on cooldown) → red highlight
+            //   'available' — not yet completed → green highlight
+            //   null         — not a known work order
+            getBestowableWorkOrderStatus(bestowQuestName) {
+                if (!bestowQuestName) return null;
+                if (this.completedSet?.has(bestowQuestName)) return 'completed';
+                if (this.completions?.[bestowQuestName]) return 'completed';
+                return 'available';
+            }
+
             getCollectObjective(q) {
                 if (!Array.isArray(q.Objectives)) return null;
                 for (const o of q.Objectives) {
@@ -1930,6 +1941,15 @@
             render() {
                 const container = document.getElementById('inventoryList');
 
+                // Status of a work-order bestow scroll for the active character.
+                // Returns 'available' (green), 'completed' (red), or null. Used to tint cards / rows.
+                this._workOrderBestowStatus = (item) => {
+                    const wo = item?.details?.BestowQuest;
+                    if (!wo) return null;
+                    if (typeof workOrderBrowser === 'undefined' || !workOrderBrowser?.getBestowableWorkOrderStatus) return null;
+                    return workOrderBrowser.getBestowableWorkOrderStatus(wo);
+                };
+
                 if (this.filteredItems.length === 0) {
                     container.innerHTML = `
                         <div class="empty-state">
@@ -2129,9 +2149,16 @@
                 const slot = item.EquipSlot || item.Slot || '';
                 const stack = item.StackSize > 1 ? `×${item.StackSize}` : '';
                 const perItemHtml = item.StackSize > 1 ? `${perItemValue.toFixed(1)}g ea` : '';
+                const woStatus = this._workOrderBestowStatus?.(item) || null;
+                const woClass = woStatus ? ` wo-target-${woStatus}` : '';
+                const woTitle = woStatus === 'available'
+                    ? 'Work order — not yet completed'
+                    : woStatus === 'completed'
+                        ? 'Work order — already completed'
+                        : '';
                 return `
-                    <div class="item-row ${rarityClass}">
-                        <div class="ir-col ir-col-name">${iconHtml}<span class="ir-name">${item.Name || 'Unknown Item'}</span></div>
+                    <div class="item-row ${rarityClass}${woClass}" ${woTitle ? `title="${woTitle}"` : ''}>
+                        <div class="ir-col ir-col-name">${iconHtml}<span class="ir-name">${item.Name || 'Unknown Item'}</span>${woStatus ? `<span class="wo-target-marker" title="${woTitle}">📋</span>` : ''}</div>
                         <div class="ir-col ir-col-char">${charCell}</div>
                         <div class="ir-col ir-col-rarity">${rarity}</div>
                         <div class="ir-col ir-col-level">${level ? `Lvl ${level}` : ''}</div>
@@ -2178,12 +2205,19 @@
                     detailBadges.push(`<span class="item-detail-badge">${slot}</span>`);
                 }
 
+                const woStatus = this._workOrderBestowStatus?.(item) || null;
+                const woClass = woStatus ? ` wo-target-${woStatus}` : '';
+                const woTitle = woStatus === 'available'
+                    ? 'Work order — not yet completed'
+                    : woStatus === 'completed'
+                        ? 'Work order — already completed'
+                        : '';
                 return `
-                    <div class="item-card ${rarityClass}">
+                    <div class="item-card ${rarityClass}${woClass}" ${woTitle ? `title="${woTitle}"` : ''}>
                         <div class="item-header">
                             <div class="item-name-group">
                                 ${iconHtml}
-                                <div class="item-name">${item.Name || 'Unknown Item'}</div>
+                                <div class="item-name">${item.Name || 'Unknown Item'}${woStatus ? ` <span class="wo-target-marker" title="${woTitle}">📋</span>` : ''}</div>
                             </div>
                             ${item.StackSize > 1 ? `<span class="item-stack">×${item.StackSize}</span>` : ''}
                         </div>
