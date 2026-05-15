@@ -22,6 +22,7 @@
             <a href="timers.html">Timers</a>
             <a href="hoplology-tracker.html">Hoplology Tracker</a>
             <a href="teleportation.html">Teleportation</a>
+            <a href="CraftingCaravan.html">Crafting Caravan</a>
         </div>
 
         <div class="file-loader">
@@ -2701,12 +2702,35 @@
                         if (rc !== 0) return rc;
                         return (a.npc.Name || a.key).localeCompare(b.npc.Name || b.key);
                     });
+
+                    // Sum remaining + cap across vendors in this category at the player's current favor tier.
+                    // Vendors without a captured remaining are assumed full (no evidence anything has been spent).
+                    let totalRemaining = 0;
+                    let totalCap = 0;
+                    for (const entry of matching) {
+                        const currentCap = this.resolveCurrentCap(entry);
+                        if (!currentCap) continue;
+                        totalCap += currentCap.cap;
+                        const tracked = this.vendorData[entry.key] || {};
+                        const remaining = tracked.remaining !== undefined && tracked.remaining !== null
+                            ? tracked.remaining
+                            : currentCap.cap;
+                        totalRemaining += remaining;
+                    }
+                    let totalsHtml = '';
+                    if (totalCap > 0) {
+                        const pct = totalRemaining / totalCap;
+                        const cls = pct > 0.5 ? 'remaining-high' : pct > 0.2 ? 'remaining-med' : 'remaining-low';
+                        totalsHtml = `<span class="quest-count-badge"><span class="${cls}">${totalRemaining.toLocaleString()}g</span> / ${totalCap.toLocaleString()}g</span>`;
+                    }
+
                     return `
                         <div class="location-accordion">
                             <div class="accordion-header" data-accordion="${accordionId}">
                                 <div class="accordion-title">
                                     <span>${cat.name}</span>
                                     <span class="quest-count-badge">${matching.length} merchant${matching.length !== 1 ? 's' : ''}</span>
+                                    ${totalsHtml}
                                 </div>
                                 <div class="accordion-icon">▼</div>
                             </div>
@@ -2716,6 +2740,20 @@
                         </div>
                     `;
                 }).join('');
+            }
+
+            // Resolve the cap entry for an NPC at the player's current favor tier
+            // (matches the logic used in renderFlatVendorRow / updateRowCells).
+            resolveCurrentCap(entry) {
+                const parsedCaps = this.parseCaps(entry.storeService).filter(p => p.favorLevel !== 'Despised');
+                const tracked = this.vendorData[entry.key] || {};
+                const favorLevel = entry.favorLevel || tracked.favorLevel || null;
+                if (!favorLevel) return null;
+                const exact = parsedCaps.find(p => p.favorLevel === favorLevel);
+                if (exact) return exact;
+                const idx = this.FAVOR_ORDER.indexOf(favorLevel);
+                if (idx < 0) return null;
+                return [...parsedCaps].reverse().find(p => this.FAVOR_ORDER.indexOf(p.favorLevel) <= idx) || null;
             }
 
             renderFavoritesSection() {

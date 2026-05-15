@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Gorgon: Crafting Caravan Quests</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="theme.js"></script>
+    <style>
+        .cc-controls {
+            padding: 16px 30px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .cc-controls input[type="text"] {
+            flex: 1;
+            min-width: 220px;
+            max-width: 420px;
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            font-size: 0.95em;
+        }
+
+        .cc-controls input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102,126,234,0.2);
+        }
+
+        .cc-controls label {
+            font-weight: 600;
+            font-size: 0.9em;
+            color: #495057;
+        }
+
+        .cc-status {
+            font-size: 0.85em;
+            color: #6c757d;
+            margin-left: auto;
+        }
+
+        .cc-body {
+            padding: 20px 30px 40px;
+        }
+
+        .cc-note {
+            font-size: 0.82em;
+            color: #6c757d;
+            margin-bottom: 18px;
+            padding: 10px 14px;
+            background: #f8f9fa;
+            border-left: 3px solid #667eea;
+            border-radius: 0 6px 6px 0;
+        }
+
+        .skill-section {
+            margin-bottom: 28px;
+        }
+
+        .skill-title {
+            font-size: 1.15em;
+            font-weight: 700;
+            color: #495057;
+            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+            border-left: 4px solid #667eea;
+            padding: 8px 14px;
+            border-radius: 0 6px 6px 0;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .skill-title .count-pill {
+            font-size: 0.75em;
+            font-weight: 600;
+            background: #667eea;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        .quest-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+            gap: 10px;
+        }
+
+        .quest-card {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 12px 14px;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+
+        .quest-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 2px 8px rgba(102,126,234,0.15);
+        }
+
+        .quest-header {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+
+        .quest-name {
+            font-weight: 700;
+            color: #212529;
+            font-size: 1em;
+        }
+
+        .level-badge {
+            font-size: 0.78em;
+            font-weight: 700;
+            background: #667eea;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            white-space: nowrap;
+        }
+
+        .level-badge.no-level {
+            background: #6c757d;
+        }
+
+        .quest-npc {
+            font-size: 0.82em;
+            color: #6c757d;
+            margin-bottom: 6px;
+        }
+
+        .quest-desc {
+            font-size: 0.85em;
+            color: #495057;
+            line-height: 1.4;
+            margin-bottom: 8px;
+            font-style: italic;
+        }
+
+        .quest-objectives {
+            font-size: 0.85em;
+            color: #495057;
+            margin-bottom: 6px;
+        }
+
+        .quest-objectives ul {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .quest-objectives li {
+            margin: 4px 0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .quest-objectives li.obj-scripted {
+            color: #6c757d;
+            font-size: 0.9em;
+        }
+
+        .obj-icon {
+            width: 28px;
+            height: 28px;
+            object-fit: contain;
+            background: #f1f3f5;
+            border-radius: 4px;
+            padding: 1px;
+            flex-shrink: 0;
+        }
+
+        .obj-verb {
+            color: #6c757d;
+            font-size: 0.92em;
+        }
+
+        .obj-ench {
+            font-size: 0.85em;
+            color: #8e44ad;
+            font-weight: 600;
+        }
+
+        .quest-rewards {
+            font-size: 0.8em;
+            color: #6c757d;
+            border-top: 1px dashed #e9ecef;
+            padding-top: 6px;
+            margin-top: 6px;
+        }
+
+        .reward-pill {
+            display: inline-block;
+            background: #f1f3f5;
+            border: 1px solid #e9ecef;
+            border-radius: 10px;
+            padding: 1px 8px;
+            margin: 2px 4px 2px 0;
+            font-size: 0.95em;
+        }
+
+        .reuse-tag {
+            font-size: 0.78em;
+            color: #6c757d;
+            float: right;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px 20px;
+            color: #6c757d;
+            font-style: italic;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c2c7;
+            border-radius: 6px;
+            padding: 12px 16px;
+            color: #842029;
+            margin: 16px 0;
+        }
+
+        /* ── Dark mode ─────────────────────────────────────────── */
+        html[data-theme="dark"] .cc-controls {
+            background: #252540;
+            border-bottom-color: #3a3a5a;
+        }
+
+        html[data-theme="dark"] .cc-controls label {
+            color: #c0c0e0;
+        }
+
+        html[data-theme="dark"] .cc-controls input[type="text"] {
+            background: #2a2a44;
+            border-color: #3a3a5a;
+            color: #e0e0f0;
+        }
+
+        html[data-theme="dark"] .cc-controls input[type="text"]:focus {
+            border-color: #8899ff;
+            box-shadow: 0 0 0 2px rgba(136,153,255,0.2);
+        }
+
+        html[data-theme="dark"] .cc-controls input[type="text"]::placeholder {
+            color: #6666aa;
+        }
+
+        html[data-theme="dark"] .cc-status {
+            color: #8888aa;
+        }
+
+        html[data-theme="dark"] .cc-note {
+            background: #1e2240;
+            border-left-color: #8899ff;
+            color: #9090b0;
+        }
+
+        html[data-theme="dark"] .skill-title {
+            background: linear-gradient(135deg, rgba(136,153,255,0.1) 0%, rgba(118,75,162,0.1) 100%);
+            border-left-color: #8899ff;
+            color: #c0c0e0;
+        }
+
+        html[data-theme="dark"] .skill-title .count-pill {
+            background: #5566cc;
+        }
+
+        html[data-theme="dark"] .quest-card {
+            background: #1e2240;
+            border-color: #3a3a5a;
+        }
+
+        html[data-theme="dark"] .quest-card:hover {
+            border-color: #8899ff;
+            box-shadow: 0 2px 8px rgba(136,153,255,0.2);
+        }
+
+        html[data-theme="dark"] .quest-name {
+            color: #e0e0f0;
+        }
+
+        html[data-theme="dark"] .level-badge {
+            background: #5566cc;
+        }
+
+        html[data-theme="dark"] .level-badge.no-level {
+            background: #4a4a66;
+        }
+
+        html[data-theme="dark"] .quest-npc,
+        html[data-theme="dark"] .quest-desc,
+        html[data-theme="dark"] .quest-objectives,
+        html[data-theme="dark"] .reuse-tag {
+            color: #b0b0c8;
+        }
+
+        html[data-theme="dark"] .obj-icon {
+            background: #2a2a44;
+        }
+
+        html[data-theme="dark"] .obj-verb,
+        html[data-theme="dark"] .quest-objectives li.obj-scripted {
+            color: #8888aa;
+        }
+
+        html[data-theme="dark"] .obj-ench {
+            color: #c89bff;
+        }
+
+        html[data-theme="dark"] .quest-rewards {
+            color: #9090b0;
+            border-top-color: #3a3a5a;
+        }
+
+        html[data-theme="dark"] .reward-pill {
+            background: #2a2a44;
+            border-color: #3a3a5a;
+            color: #c0c0e0;
+        }
+
+        html[data-theme="dark"] .no-results,
+        html[data-theme="dark"] .loading {
+            color: #8888aa;
+        }
+
+        html[data-theme="dark"] .error {
+            background: #3a1f23;
+            border-color: #5c2e35;
+            color: #f0b0b8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚛 Crafting Caravan Quests</h1>
+            <p>All Crafting Caravan event quests, grouped by skill</p>
+        </header>
+
+        <div class="nav">
+            <a href="index.html">Quest/Inventory Tracker</a>
+            <a href="maps.html">Interactive Maps</a>
+            <a href="chat-watcher.html">Chat Watcher</a>
+            <a href="dps.html">Combat Tracker</a>
+            <a href="timers.html">Timers</a>
+            <a href="hoplology-tracker.html">Hoplology Tracker</a>
+            <a href="teleportation.html">Teleportation</a>
+            <b>Crafting Caravan</b>
+        </div>
+
+        <div class="cc-controls">
+            <label for="searchInput">Search:</label>
+            <input type="text" id="searchInput" placeholder="Quest name, NPC, item, description...">
+            <span class="cc-status" id="ccStatus"></span>
+        </div>
+
+        <div class="cc-body">
+            <div class="cc-note">
+                Only available during the live Crafting Caravan event at Red Wing Casino. Each quest is gated by an
+                in-game crafting skill level and rewards Caravan Tokens, skill XP, and favor with Orran the Caravan Leader.
+            </div>
+            <div id="content" class="loading">Loading quest data from CDN…</div>
+            <div id="noResults" class="no-results" style="display:none;">No quests match your search.</div>
+        </div>
+    </div>
+
+    <script>
+        const CDN_FALLBACK = 'https://cdn.projectgorgon.com/v470/data/';
+        let cdnBaseUrl = CDN_FALLBACK;
+
+        // Groups whose intro/bonus quests have no MinSkillLevel — keep them at the top.
+        const SPECIAL_GROUP = 'Event Intros & Bonuses';
+
+        // Pretty-print skill names like "FlowerArrangement" → "Flower Arrangement".
+        function prettifySkill(s) {
+            if (!s) return SPECIAL_GROUP;
+            return s.replace(/([a-z])([A-Z])/g, '$1 $2');
+        }
+
+        const esc = s => String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+        // Requirements is usually an array but can also be a bare object on a few quests.
+        function flatReqs(r) {
+            if (!r) return [];
+            if (Array.isArray(r)) return r;
+            return Object.values(r);
+        }
+
+        async function resolveCdnBaseUrl() {
+            try {
+                const res = await fetch('https://cdn.projectgorgon.com/', { redirect: 'follow' });
+                const urlMatch = res.url.match(/\/(v\d+)\//);
+                if (urlMatch) {
+                    cdnBaseUrl = `https://cdn.projectgorgon.com/${urlMatch[1]}/data/`;
+                    return;
+                }
+                // Fall back to meta-refresh body parsing
+                const text = await res.text();
+                const bodyMatch = text.match(/\/(v\d+)\/data\//);
+                if (bodyMatch) {
+                    cdnBaseUrl = `https://cdn.projectgorgon.com/${bodyMatch[1]}/data/`;
+                }
+            } catch (e) {
+                console.warn('[CDN] version detection failed, using fallback:', cdnBaseUrl, e);
+            }
+        }
+
+        async function fetchJson(filename) {
+            const res = await fetch(cdnBaseUrl + filename);
+            if (!res.ok) throw new Error(`Failed to fetch ${filename} (HTTP ${res.status})`);
+            return res.json();
+        }
+
+        async function loadAllData() {
+            await resolveCdnBaseUrl();
+            const [quests, items, recipes] = await Promise.all([
+                fetchJson('quests.json'),
+                fetchJson('items.json'),
+                fetchJson('recipes.json')
+            ]);
+            const itemsByInternal = {};
+            for (const v of Object.values(items)) {
+                if (v && v.InternalName) itemsByInternal[v.InternalName] = v;
+            }
+            const recipesByInternal = {};
+            for (const v of Object.values(recipes)) {
+                if (v && v.InternalName) recipesByInternal[v.InternalName] = v;
+            }
+            return { quests, itemsByInternal, recipesByInternal };
+        }
+
+        function extractCaravanQuests(allQuests) {
+            const matches = [];
+            for (const q of Object.values(allQuests)) {
+                const reqs = flatReqs(q.Requirements);
+                const hasCaravanKeyword = reqs.some(r =>
+                    r && r.T === 'HasEffectKeyword' && r.Keyword === 'LiveEvent_Crafting');
+                if (!hasCaravanKeyword) continue;
+
+                const minSkill = reqs.find(r => r && r.T === 'MinSkillLevel');
+                matches.push({
+                    quest: q,
+                    skill: minSkill ? minSkill.Skill : null,
+                    level: minSkill ? (minSkill.Level || 0) : null
+                });
+            }
+            return matches;
+        }
+
+        function groupBySkill(entries) {
+            const groups = new Map();
+            for (const e of entries) {
+                const groupName = e.skill ? prettifySkill(e.skill) : SPECIAL_GROUP;
+                if (!groups.has(groupName)) groups.set(groupName, []);
+                groups.get(groupName).push(e);
+            }
+            // Sort each group by level asc, then by name as tiebreaker
+            for (const arr of groups.values()) {
+                arr.sort((a, b) => {
+                    const lvA = a.level ?? -1;
+                    const lvB = b.level ?? -1;
+                    if (lvA !== lvB) return lvA - lvB;
+                    return (a.quest.Name || '').localeCompare(b.quest.Name || '');
+                });
+            }
+            // Order groups: special group first, then alphabetical
+            const ordered = [];
+            if (groups.has(SPECIAL_GROUP)) ordered.push([SPECIAL_GROUP, groups.get(SPECIAL_GROUP)]);
+            for (const [name, arr] of [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+                if (name !== SPECIAL_GROUP) ordered.push([name, arr]);
+            }
+            return ordered;
+        }
+
+        function formatReuse(q) {
+            if (q.ReuseTime_Hours) return `↻ ${q.ReuseTime_Hours}h`;
+            if (q.ReuseTime_Days) return `↻ ${q.ReuseTime_Days}d`;
+            if (q.ReuseTime_Minutes) return `↻ ${q.ReuseTime_Minutes}m`;
+            return '';
+        }
+
+        function npcDisplay(q) {
+            const npc = q.FavorNpc;
+            if (!npc) return '';
+            // e.g. "AreaCasino/NPC_Raim" → "Raim"
+            const last = npc.split('/').pop() || npc;
+            return last.replace(/^(NPC_|LiveNpc_)/, '');
+        }
+
+        function iconUrl(iconId) {
+            if (!iconId) return null;
+            return cdnBaseUrl.replace('/data/', '/icons/') + 'icon_' + iconId + '.png';
+        }
+
+        function iconImgHtml(iconId, altName) {
+            const url = iconUrl(iconId);
+            if (!url) return '';
+            return `<img class="obj-icon" src="${url}" alt="${esc(altName || '')}" loading="lazy" onerror="this.style.display='none'">`;
+        }
+
+        // Pair UseRecipe with Collect (same GroupId) so we render one line per crafted item.
+        // Solo Collect (no matching UseRecipe) is a delivery-only bonus task.
+        function buildObjectiveLines(q, items, recipes) {
+            const objs = Array.isArray(q.Objectives) ? q.Objectives : [];
+            const lines = [];
+
+            const useRecipes = objs.filter(o => o.Type === 'UseRecipe');
+            const collects   = objs.filter(o => o.Type === 'Collect');
+            const scripted   = objs.filter(o => o.Type === 'Scripted');
+
+            // Index collects by GroupId AND track which ones we consume; leftovers render standalone.
+            const collectsByGroup = new Map();
+            for (const c of collects) {
+                const key = c.GroupId != null ? c.GroupId : `__no_group_${Math.random()}`;
+                if (!collectsByGroup.has(key)) collectsByGroup.set(key, []);
+                collectsByGroup.get(key).push(c);
+            }
+            const consumedCollects = new Set();
+
+            for (const r of useRecipes) {
+                const recipe = recipes[r.Target] || null;
+                // Find a Collect partner with the same GroupId — prefer the first unused one.
+                let partner = null;
+                if (r.GroupId != null && collectsByGroup.has(r.GroupId)) {
+                    for (const c of collectsByGroup.get(r.GroupId)) {
+                        if (!consumedCollects.has(c)) { partner = c; break; }
+                    }
+                }
+                if (partner) consumedCollects.add(partner);
+                const item = partner ? (items[partner.ItemName] || null) : null;
+
+                // Prefer the item's display name (e.g. "Rough Cloth Shirt") because the recipe
+                // name often appends " (Enchanted)" — partner.ItemName drops that suffix.
+                const displayName = item?.Name || recipe?.Name || partner?.ItemName || r.Target;
+                const iconId = recipe?.IconId || item?.IconId;
+                const qty = partner?.Number || r.Number || 1;
+                const enchanted = recipe?.Name?.includes('(Enchanted)') || /E$/.test(r.Target);
+
+                lines.push({
+                    verb: 'Craft & deliver',
+                    iconId,
+                    name: displayName,
+                    qty,
+                    enchanted
+                });
+            }
+
+            // Solo Collects (no recipe partner) — e.g. bonus quests like "Raim Needs String"
+            for (const c of collects) {
+                if (consumedCollects.has(c)) continue;
+                const item = items[c.ItemName] || null;
+                lines.push({
+                    verb: 'Deliver',
+                    iconId: item?.IconId,
+                    name: item?.Name || c.ItemName,
+                    qty: c.Number || 1,
+                    enchanted: false
+                });
+            }
+
+            // Scripted lines fall through as plain text (e.g. "Talk to Raim", "Speak to any caravan member")
+            for (const s of scripted) {
+                if (s.Description) {
+                    lines.push({ verb: null, iconId: null, name: s.Description, qty: null, enchanted: false });
+                }
+            }
+
+            return lines;
+        }
+
+        function renderObjectives(q, items, recipes) {
+            const lines = buildObjectiveLines(q, items, recipes);
+            if (lines.length === 0) return '';
+            const html = lines.map(l => {
+                if (!l.verb) {
+                    // Scripted — plain talk/speak line
+                    return `<li class="obj-scripted">💬 ${esc(l.name)}</li>`;
+                }
+                const icon = iconImgHtml(l.iconId, l.name);
+                const qtyText = l.qty && l.qty > 1 ? ` ×${l.qty}` : '';
+                const ench = l.enchanted ? ' <span class="obj-ench">(Enchanted)</span>' : '';
+                return `<li class="obj-item">${icon}<span class="obj-verb">${esc(l.verb)}:</span> <strong>${esc(l.name)}</strong>${qtyText}${ench}</li>`;
+            }).join('');
+            return `<div class="quest-objectives"><ul>${html}</ul></div>`;
+        }
+
+        function renderRewards(q) {
+            const bits = [];
+            for (const r of (q.Rewards || [])) {
+                if (r.T === 'Currency') {
+                    bits.push(`💎 ${r.Amount || 0} ${esc(r.Currency || '')}`);
+                } else if (r.T === 'SkillXp') {
+                    bits.push(`📈 ${esc(r.Skill)} +${(r.Xp || 0).toLocaleString()} XP`);
+                }
+            }
+            for (const it of (q.Rewards_Items || [])) {
+                const qty = it.StackSize > 1 ? ` ×${it.StackSize}` : '';
+                bits.push(`🎁 ${esc(it.Item)}${qty}`);
+            }
+            for (const eff of (q.Rewards_Effects || [])) {
+                // GiveXP(Tailoring,1100) → 📈 Tailoring +1,100 XP
+                const xp = /^GiveXP\(([^,]+),(\d+)\)$/.exec(eff);
+                if (xp) {
+                    bits.push(`📈 ${esc(xp[1])} +${parseInt(xp[2]).toLocaleString()} XP`);
+                    continue;
+                }
+                // DeltaNpcFavor(AreaCasino/LiveNpc_Orran,5) → 🤝 Orran +5
+                const fav = /^DeltaNpcFavor\(([^,]+),(-?\d+)\)$/.exec(eff);
+                if (fav) {
+                    const name = fav[1].split('/').pop().replace(/^(NPC_|LiveNpc_)/, '');
+                    const amt = parseInt(fav[2]);
+                    bits.push(`🤝 ${esc(name)} ${amt >= 0 ? '+' : ''}${amt} favor`);
+                    continue;
+                }
+                bits.push(`✨ ${esc(eff)}`);
+            }
+            if (bits.length === 0) return '';
+            return `<div class="quest-rewards">${
+                bits.map(b => `<span class="reward-pill">${b}</span>`).join('')
+            }</div>`;
+        }
+
+        function renderQuestCard(entry, items, recipes) {
+            const q = entry.quest;
+            const levelBadge = entry.level != null
+                ? `<span class="level-badge">Lv ${entry.level}</span>`
+                : `<span class="level-badge no-level">Any</span>`;
+            const reuse = formatReuse(q);
+            const npc = npcDisplay(q);
+            // Resolve names for the search index so users can search by item name too.
+            const objNames = (q.Objectives || []).map(o => {
+                const item = o.ItemName ? items[o.ItemName] : null;
+                const recipe = o.Target ? recipes[o.Target] : null;
+                return [o.Description, o.Target, o.ItemName, item?.Name, recipe?.Name].filter(Boolean).join(' ');
+            }).join(' ');
+            return `
+                <div class="quest-card" data-search="${esc((q.Name || '') + ' ' + (q.Description || '') + ' ' + (q.InternalName || '') + ' ' + npc + ' ' + objNames).toLowerCase()}">
+                    <div class="quest-header">
+                        <span class="quest-name">${esc(q.Name || q.InternalName)}</span>
+                        ${levelBadge}
+                    </div>
+                    ${npc ? `<div class="quest-npc">👤 ${esc(npc)}${reuse ? ` <span class="reuse-tag">${reuse}</span>` : ''}</div>` : (reuse ? `<div class="quest-npc"><span class="reuse-tag">${reuse}</span></div>` : '')}
+                    ${q.Description ? `<div class="quest-desc">${esc(q.Description)}</div>` : ''}
+                    ${renderObjectives(q, items, recipes)}
+                    ${renderRewards(q)}
+                </div>
+            `;
+        }
+
+        function renderAll(groups, items, recipes) {
+            const html = groups.map(([groupName, entries]) => `
+                <div class="skill-section" data-group="${esc(groupName)}">
+                    <div class="skill-title">
+                        <span>${esc(groupName)}</span>
+                        <span class="count-pill">${entries.length}</span>
+                    </div>
+                    <div class="quest-grid">
+                        ${entries.map(e => renderQuestCard(e, items, recipes)).join('')}
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('content').innerHTML = html;
+            document.getElementById('content').classList.remove('loading');
+        }
+
+        function filterCards() {
+            const query = document.getElementById('searchInput').value.trim().toLowerCase();
+            let totalVisible = 0;
+            for (const section of document.querySelectorAll('.skill-section')) {
+                let sectionVisible = 0;
+                for (const card of section.querySelectorAll('.quest-card')) {
+                    const match = !query || (card.dataset.search || '').includes(query);
+                    card.style.display = match ? '' : 'none';
+                    if (match) sectionVisible++;
+                }
+                section.style.display = sectionVisible > 0 ? '' : 'none';
+                totalVisible += sectionVisible;
+            }
+            document.getElementById('noResults').style.display = totalVisible === 0 ? '' : 'none';
+        }
+
+        (async function init() {
+            try {
+                const { quests, itemsByInternal, recipesByInternal } = await loadAllData();
+                const entries = extractCaravanQuests(quests);
+                const groups = groupBySkill(entries);
+                renderAll(groups, itemsByInternal, recipesByInternal);
+                const versionMatch = cdnBaseUrl.match(/\/(v\d+)\//);
+                document.getElementById('ccStatus').textContent =
+                    `${entries.length} quests · CDN ${versionMatch ? versionMatch[1] : ''}`;
+                document.getElementById('searchInput').addEventListener('input', filterCards);
+            } catch (err) {
+                console.error(err);
+                document.getElementById('content').classList.remove('loading');
+                document.getElementById('content').innerHTML =
+                    `<div class="error">Failed to load quest data: ${esc(err.message || err)}</div>`;
+            }
+        })();
+    </script>
+</body>
+</html>
