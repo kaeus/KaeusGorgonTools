@@ -406,7 +406,7 @@
                 // Find the most recently modified Character_*.json
                 let latestHandle = null, latestMtime = 0;
                 for await (const [name, handle] of reportsDir.entries()) {
-                    if (handle.kind === 'file' && name.startsWith('Character_') && name.endsWith('.json')) {
+                    if (handle.kind === 'file' && isCharacterReportName(name)) {
                         const f = await handle.getFile();
                         if (f.lastModified > latestMtime) {
                             latestMtime = f.lastModified;
@@ -562,7 +562,7 @@
             async scanCharacterFiles(reportsDir) {
                 const characters = [];
                 for await (const [name, handle] of reportsDir.entries()) {
-                    if (handle.kind !== 'file' || !name.startsWith('Character_') || !name.endsWith('.json')) continue;
+                    if (handle.kind !== 'file' || !isCharacterReportName(name)) continue;
                     const baseName = name.replace(/^Character_/, '').replace(/\.json$/, '');
                     const parsed = parseCharacterBaseName(baseName);
                     const file = await handle.getFile();
@@ -1987,7 +1987,7 @@
                     const FAVOR_ORDER = ['Despised','Hated','Disliked','Tolerated','Neutral','Comfortable','Friends','CloseFriends','BestFriends','LikeFamily','SoulMates'];
                     const getFavor = (key) => {
                         const vd = typeof storeBrowser !== 'undefined' ? storeBrowser.vendorData : {};
-                        return vd[key]?.favorLevel || this.dataLoader.characterData?.NPCs?.[key]?.FavorLevel || null;
+                        return this.dataLoader.characterData?.NPCs?.[key]?.FavorLevel || vd[key]?.favorLevel || null;
                     };
                     for (const [vaultKey, vault] of Object.entries(vaultsData)) {
                         if (!vault.Levels || Object.keys(vault.Levels).length === 0) continue;
@@ -2267,10 +2267,10 @@
 
                 if (npcEntries.length === 0) { container.style.display = 'none'; return; }
 
-                // Look up current favor: vendorData (storeBrowser global) → characterData.NPCs
+                // Look up current favor: characterData.NPCs (auto-exported) → legacy player.log vendorData
                 const getFavor = (key) => {
                     const vd = typeof storeBrowser !== 'undefined' ? storeBrowser.vendorData : {};
-                    return vd[key]?.favorLevel || this.dataLoader.characterData?.NPCs?.[key]?.FavorLevel || null;
+                    return this.dataLoader.characterData?.NPCs?.[key]?.FavorLevel || vd[key]?.favorLevel || null;
                 };
 
                 // Current slots: exact tier or next-lower tier that exists in Levels
@@ -2409,6 +2409,12 @@
 
         // Parse "Kaeus" → {charName:"Kaeus", server:"", key:"Kaeus"}
         // Parse "Kaeus_Server" → {charName:"Kaeus", server:"Server", key:"Kaeus:Server"}
+        // Character_<Name>_<Server>.json. Auto-export also writes a nameless Character__<Server>.json
+        // ("Character": "???") right after the real one — skip it or it wins the newest-file check.
+        function isCharacterReportName(name) {
+            return name.startsWith('Character_') && !name.startsWith('Character__') && name.endsWith('.json');
+        }
+
         function parseCharacterBaseName(baseName) {
             const idx = baseName.indexOf('_');
             if (idx === -1) return { charName: baseName, server: '', key: baseName };
@@ -2508,10 +2514,11 @@
                     const hasBuyTypes = storeService.CapIncreases.some(line => (line.match(/:/g) || []).length >= 2);
                     // if (!hasBuyTypes) continue;
 
-                    // Match character favor level — prefer player.log vendor data (more recent), fall back to character file
+                    // Match character favor level — the character file is auto-exported now, so prefer it;
+                    // fall back to favor captured from older player.log vendor screens
                     const charNPC = this.dataLoader.characterData?.NPCs?.[key];
                     const vendorEntry = this.vendorData?.[key];
-                    const favorLevel = vendorEntry?.favorLevel || charNPC?.FavorLevel || null;
+                    const favorLevel = charNPC?.FavorLevel || vendorEntry?.favorLevel || null;
 
                     this.storeNPCs.push({
                         key,
@@ -2606,7 +2613,7 @@
                 const favorBadgeHtml = favorLevel
                     ? `<span class="favor-badge favor-${favorLevel.toLowerCase()}">${favorLevel}</span>`
                     : `<span class="favor-badge favor-unknown">Not Met</span>`;
-                const tracked = this.vendorData[key] || {};
+                const tracked = this.getTracked(key);
                 const remaining = tracked.remaining !== undefined ? tracked.remaining : null;
                 const resetAt = tracked.resetAt || null;
                 let capHtml;
@@ -2614,7 +2621,10 @@
                     if (remaining !== null) {
                         const pct = remaining / currentCap.cap;
                         const cls = pct > 0.5 ? 'remaining-high' : pct > 0.2 ? 'remaining-med' : 'remaining-low';
-                        capHtml = `<span class="${cls}">${remaining.toLocaleString()}g</span> / ${currentCap.cap.toLocaleString()}g`;
+                        const spentTitle = tracked.spent != null ? ` title="${tracked.spent.toLocaleString()}g spent since last reset"` : '';
+                        capHtml = `<span class="${cls}"${spentTitle}>${remaining.toLocaleString()}g</span> / ${currentCap.cap.toLocaleString()}g`;
+                    } else if (tracked.spentUnknown) {
+                        capHtml = `<span class="remaining-med" title="Sold to since the last reset — the character file doesn't report how much gold is left">Sold to</span> / ${currentCap.cap.toLocaleString()}g`;
                     } else {
                         capHtml = `💰 ${currentCap.cap.toLocaleString()}g`;
                     }
@@ -2629,7 +2639,7 @@
                     resetStyle = `color:${this.resetColor(ms)}`;
                 }
                 const isStarred = this.starredVendors.has(key);
-                const sortAttrs = this.rowSortAttrs({ name, area, favorLevel, remaining, currentCap, resetAt, buysText, isStarred });
+                const sortAttrs = this.rowSortAttrs({ name, area, favorLevel, remaining: tracked.spentUnknown ? 0 : remaining, currentCap, resetAt, buysText, isStarred });
                 return `
                     <tr data-npc-key="${key}"${sortAttrs}>
                         <td class="col-star"><button class="star-btn${isStarred ? ' starred' : ''}" title="${isStarred ? 'Remove from favorites' : 'Add to favorites'}">★</button></td>
@@ -2728,12 +2738,49 @@
                 }).join('');
             }
 
+            // Vendor state for an NPC. The game no longer logs ProcessVendorScreen to player.log;
+            // instead the auto-exported character file carries NPCs[key].VendorResetTime (present while
+            // a vendor is recovering from a sale) and CouncilsSpent (gold the vendor has paid out this
+            // reset window), so remaining = current cap − CouncilsSpent.
+            getTracked(key) {
+                const logged = this.vendorData[key] || {};
+                const charNPC = this.dataLoader.characterData?.NPCs?.[key];
+                if (!charNPC) return logged;
+
+                const tracked = { ...logged, favorLevel: charNPC.FavorLevel || logged.favorLevel };
+                const resetAt = charNPC.VendorResetTime
+                    ? Date.parse(charNPC.VendorResetTime.replace(' ', 'T'))
+                    : NaN;
+                if (Number.isFinite(resetAt) && resetAt > Date.now()) {
+                    tracked.resetAt = resetAt;
+                    const spent = charNPC.CouncilsSpent;
+                    const entry = this.storeNPCs.find(e => e.key === key);
+                    const cap = entry ? this.resolveCurrentCap(entry)?.cap : logged.cap;
+                    if (typeof spent === 'number' && cap != null) {
+                        tracked.spent = spent;
+                        tracked.remaining = Math.max(0, cap - spent);
+                    } else {
+                        // Keep a logged remaining only if it belongs to the same reset window
+                        const sameWindow = logged.resetAt && Math.abs(logged.resetAt - resetAt) < 60000;
+                        if (!sameWindow) {
+                            delete tracked.remaining;
+                            tracked.spentUnknown = true;
+                        }
+                    }
+                } else {
+                    // No pending reset (or it has passed) — vendor is back at full cap
+                    tracked.resetAt = Number.isFinite(resetAt) ? resetAt : null;
+                    delete tracked.remaining;
+                }
+                return tracked;
+            }
+
             // Resolve the cap entry for an NPC at the player's current favor tier
             // (matches the logic used in renderFlatVendorRow / updateRowCells).
             resolveCurrentCap(entry) {
                 const parsedCaps = this.parseCaps(entry.storeService).filter(p => p.favorLevel !== 'Despised');
-                const tracked = this.vendorData[entry.key] || {};
-                const favorLevel = entry.favorLevel || tracked.favorLevel || null;
+                // Not getTracked() — it calls back into this method for the cap
+                const favorLevel = entry.favorLevel || this.vendorData[entry.key]?.favorLevel || null;
                 if (!favorLevel) return null;
                 const exact = parsedCaps.find(p => p.favorLevel === favorLevel);
                 if (exact) return exact;
@@ -2750,10 +2797,11 @@
                     const currentCap = this.resolveCurrentCap(entry);
                     if (!currentCap) continue;
                     totalCap += currentCap.cap;
-                    const tracked = this.vendorData[entry.key] || {};
+                    const tracked = this.getTracked(entry.key);
+                    // Sold to with no known remaining counts as empty (conservative)
                     const remaining = tracked.remaining !== undefined && tracked.remaining !== null
                         ? tracked.remaining
-                        : currentCap.cap;
+                        : (tracked.spentUnknown ? 0 : currentCap.cap);
                     totalRemaining += remaining;
                 }
                 return { totalRemaining, totalCap };
@@ -2939,7 +2987,7 @@
             }
 
             updateRowCells(row, key) {
-                const tracked = this.vendorData[key] || {};
+                const tracked = this.getTracked(key);
                 const remaining = tracked.remaining !== undefined ? tracked.remaining : null;
                 const resetAt = tracked.resetAt || null;
 
@@ -3028,8 +3076,8 @@
                     if (!container) return;
                     container.querySelectorAll('tr[data-npc-key]').forEach(row => {
                         const key = row.getAttribute('data-npc-key');
-                        const tracked = this.vendorData[key];
-                        if (!tracked?.resetAt) return;
+                        const tracked = this.getTracked(key);
+                        if (!tracked.resetAt) return;
                         const resetCell = row.querySelector('.col-reset');
                         if (!resetCell) return;
                         const ms = tracked.resetAt - Date.now();
@@ -3179,7 +3227,7 @@
                     : `<span class="favor-badge favor-unknown">Not Met</span>`;
 
                 // Tracker data from localStorage
-                const tracked = this.vendorData[key] || {};
+                const tracked = this.getTracked(key);
                 const remaining = tracked.remaining !== undefined ? tracked.remaining : null;
                 const resetAt = tracked.resetAt || null;
 
@@ -3189,7 +3237,10 @@
                     if (remaining !== null) {
                         const pct = remaining / currentCap.cap;
                         const cls = pct > 0.5 ? 'remaining-high' : pct > 0.2 ? 'remaining-med' : 'remaining-low';
-                        capHtml = `<span class="${cls}">${remaining.toLocaleString()}g</span> / ${currentCap.cap.toLocaleString()}g`;
+                        const spentTitle = tracked.spent != null ? ` title="${tracked.spent.toLocaleString()}g spent since last reset"` : '';
+                        capHtml = `<span class="${cls}"${spentTitle}>${remaining.toLocaleString()}g</span> / ${currentCap.cap.toLocaleString()}g`;
+                    } else if (tracked.spentUnknown) {
+                        capHtml = `<span class="remaining-med" title="Sold to since the last reset — the character file doesn't report how much gold is left">Sold to</span> / ${currentCap.cap.toLocaleString()}g`;
                     } else {
                         capHtml = `💰 ${currentCap.cap.toLocaleString()}g`;
                     }
@@ -3211,7 +3262,7 @@
                 }
 
                 const isStarred = this.starredVendors.has(key);
-                const sortAttrs = this.rowSortAttrs({ name, area: entry.area, favorLevel, remaining, currentCap, resetAt, buysText, isStarred });
+                const sortAttrs = this.rowSortAttrs({ name, area: entry.area, favorLevel, remaining: tracked.spentUnknown ? 0 : remaining, currentCap, resetAt, buysText, isStarred });
                 return `
                     <tr data-npc-key="${key}"${sortAttrs}>
                         <td class="col-star"><button class="star-btn${isStarred ? ' starred' : ''}" title="Pin to top of region">★</button></td>

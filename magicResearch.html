@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Magic Research Planner — Fire & Ice</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c232d; --border:#2a323d;
+    --txt:#d5dbe3; --muted:#8b98a8; --accent:#5aa9ff;
+    --fire:#ff6b3d; --fire-dim:#3a2018; --ice:#5bc7ff; --ice-dim:#152a38;
+    --good:#43c57a; --bad:#ff5d6c; --warn:#e0b23a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font:14px/1.45 "Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  header{padding:16px 22px;background:var(--panel);border-bottom:1px solid var(--border);
+    display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  header h1{margin:0;font-size:19px;font-weight:600}
+  header h1 .fi{color:var(--fire)} header h1 .ic{color:var(--ice)}
+  .sub{color:var(--muted);font-size:12px}
+  .wrap{max-width:1320px;margin:0 auto;padding:18px 22px 80px}
+  .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+  button,label.btn{background:var(--panel2);color:var(--txt);border:1px solid var(--border);
+    border-radius:7px;padding:7px 13px;font-size:13px;cursor:pointer;transition:.12s}
+  button:hover,label.btn:hover{border-color:var(--accent);color:#fff}
+  button.ghost{background:transparent}
+  input[type=file]{display:none}
+  .pill{font-size:11px;padding:2px 8px;border-radius:20px;border:1px solid var(--border);color:var(--muted)}
+  .pill.on{color:var(--good);border-color:var(--good)}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
+
+  .school{margin-bottom:26px}
+  .school h2{font-size:16px;margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border);
+    display:flex;align-items:center;gap:10px}
+  .school.fire h2{color:var(--fire)} .school.ice h2{color:var(--ice)}
+  .school h2 .cnt{font-size:12px;color:var(--muted);font-weight:400;margin-left:auto}
+
+  .rec{background:var(--panel);border:1px solid var(--border);border-radius:7px;
+    padding:6px 9px;margin-bottom:5px;transition:.12s;
+    border-left:3px solid var(--panel2)}
+  .rec.ignored{opacity:.42}
+  .rec.done{border-left-color:var(--good)}
+  .rec-top{display:flex;align-items:center;gap:9px}
+  .lvl{font-size:10px;color:var(--muted);min-width:30px;line-height:1}
+  .lvl b{display:block;color:var(--txt);font-size:14px}
+  .rname{font-weight:600;font-size:13px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rname .exotic{font-size:9px;color:var(--warn);border:1px solid var(--warn);
+    border-radius:4px;padding:0 4px;margin-left:5px;vertical-align:middle}
+  .uses{display:flex;align-items:center;gap:6px}
+  .uses .stepper{display:flex;align-items:center;gap:1px}
+  .uses button{padding:1px 7px;font-size:14px;line-height:1;min-width:24px}
+  .uses .val{min-width:46px;text-align:center;font-variant-numeric:tabular-nums;font-size:12px}
+  .uses .val b{font-size:14px}
+  .uses .val small{color:var(--muted)}
+  .ings{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+  .ing{font-size:11px;background:var(--panel2);border:1px solid var(--border);
+    border-radius:5px;padding:1px 6px;display:flex;gap:5px;align-items:center;line-height:1.5}
+  .ing .q{color:var(--accent);font-weight:600}
+  .ing .rem{color:var(--muted)}
+  .ing.chance{border-style:dashed}
+  .ig-btn{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:1px 5px}
+  .ig-btn:hover{color:var(--bad)}
+
+  /* Totals panel */
+  .side{position:sticky;top:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px}
+  .card h3{margin:0 0 10px;font-size:14px;display:flex;align-items:center;gap:8px}
+  .card h3 .tag{font-size:11px;color:var(--muted);font-weight:400;margin-left:auto}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:5px 4px;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .need{color:var(--warn);font-weight:600}
+  .have{color:var(--good)}
+  .short{color:var(--bad);font-weight:600}
+  .ok-row td{opacity:.55}
+  .whererow td{padding-top:0;border-bottom:1px solid var(--border)}
+  .where{font-size:11px;color:var(--muted);padding-left:4px}
+  .empty{color:var(--muted);font-size:13px;padding:6px 2px}
+  .via{font-size:10px;color:var(--ice);border:1px solid var(--ice);border-radius:4px;padding:0 4px;white-space:nowrap}
+  input.price{width:58px;background:var(--bg);border:1px solid var(--border);color:var(--txt);
+    border-radius:5px;padding:2px 5px;font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+  input.price:focus{outline:none;border-color:var(--accent)}
+  input.price::-webkit-outer-spin-button,input.price::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  td.cost{color:var(--txt);font-weight:600}
+  .totalrow td{border-top:2px solid var(--border);border-bottom:none;padding-top:8px;font-weight:600}
+  #grandTotal{color:var(--accent)}
+  .barter-note{font-size:11px;color:var(--ice);margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);line-height:1.6}
+  .legend{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6}
+  .legend b{color:var(--txt)}
+  .toggle-hidden{margin-top:4px}
+  a.link{color:var(--accent);cursor:pointer;text-decoration:none;font-size:12px}
+  a.link:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="fi">Fire</span> &amp; <span class="ic">Ice</span> Magic Research Planner</h1>
+  <span class="sub">Track research completions &amp; plan ingredients — Project Gorgon</span>
+</header>
+
+<div class="wrap">
+  <div class="bar">
+    <button id="watchBtn" title="Watch your Project Gorgon Reports folder and auto-load the newest items export">Watch Reports Folder</button>
+    <label class="btn">Load file manually
+      <input type="file" id="itemsFile" accept=".json">
+    </label>
+    <span class="pill" id="charPill">No character loaded</span>
+    <span class="pill" id="watchPill" style="display:none">watching</span>
+    <button class="ghost" id="showIgnored">Show ignored (0)</button>
+    <button class="ghost" id="resetBtn" title="Clear all completion counts and ignores">Reset all</button>
+  </div>
+
+  <div class="grid">
+    <div id="schools"></div>
+
+    <div class="side">
+      <div class="card">
+        <h3>Shopping List <span class="tag" id="shopTag"></span></h3>
+        <div id="shopping"></div>
+        <div class="legend">
+          <b>Need</b> = qty for remaining uses across active levels.<br>
+          <span class="have">green</span> = enough &nbsp;·&nbsp; <span class="short">red</span> = short.<br>
+          <b>Price ea</b> × qty-to-buy → <b>Cost</b> (uses Short when a character is loaded, else Need).<br>
+          <span class="via" style="padding:0 3px">⇄</span> items are bartered — shown as their sub-ingredients.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const RECIPES = /*DATA*/[{"id":"recipe_601","school":"Fire","name":"Introductory Fire Magic Research","level":0,"maxUses":3,"ingredients":[{"code":5001,"name":"Salt","qty":3}]},{"id":"recipe_603","school":"Fire","name":"Fire Magic Research Level 5","level":5,"maxUses":5,"ingredients":[{"code":1003,"name":"Fire Dust","qty":1}]},{"id":"recipe_604","school":"Fire","name":"Fire Magic Research Level 10","level":10,"maxUses":6,"ingredients":[{"code":1003,"name":"Fire Dust","qty":2}]},{"id":"recipe_605","school":"Fire","name":"Fire Magic Research Level 15","level":15,"maxUses":5,"ingredients":[{"code":1005,"name":"Sulfur","qty":1}]},{"id":"recipe_606","school":"Fire","name":"Fire Magic Research Level 20","level":20,"maxUses":6,"ingredients":[{"code":1005,"name":"Sulfur","qty":2}]},{"id":"recipe_607","school":"Fire","name":"Fire Magic Research Level 25","level":25,"maxUses":7,"ingredients":[{"code":1006,"name":"Saltpeter","qty":1}]},{"id":"recipe_608","school":"Fire","name":"Fire Magic Research Level 30","level":30,"maxUses":5,"ingredients":[{"code":1006,"name":"Saltpeter","qty":2}]},{"id":"recipe_609","school":"Fire","name":"Fire Magic Research Level 35","level":35,"maxUses":5,"ingredients":[{"code":1003,"name":"Fire Dust","qty":2},{"code":1005,"name":"Sulfur","qty":2}]},{"id":"recipe_610","school":"Fire","name":"Fire Magic Research Level 40","level":40,"maxUses":6,"ingredients":[{"code":1005,"name":"Sulfur","qty":2},{"code":1006,"name":"Saltpeter","qty":2}]},{"id":"recipe_611","school":"Fire","name":"Fire Magic Research Level 45","level":45,"maxUses":5,"ingredients":[{"code":1003,"name":"Fire Dust","qty":1},{"code":1005,"name":"Sulfur","qty":2},{"code":1006,"name":"Saltpeter","qty":2}]},{"id":"recipe_612","school":"Fire","name":"Fire Magic Research Level 50","level":50,"maxUses":7,"ingredients":[{"code":1003,"name":"Fire Dust","qty":2},{"code":1005,"name":"Sulfur","qty":2},{"code":1006,"name":"Saltpeter","qty":2},{"code":5001,"name":"Salt","qty":1}]},{"id":"recipe_613","school":"Fire","name":"Fire Magic Research Level 55","level":55,"maxUses":7,"ingredients":[{"code":1005,"name":"Sulfur","qty":2},{"code":1006,"name":"Saltpeter","qty":2},{"code":1215,"name":"Explosive Runestone","qty":1}]},{"id":"recipe_614","school":"Fire","name":"Fire Magic Research Level 60","level":60,"maxUses":7,"ingredients":[{"code":1005,"name":"Sulfur","qty":2},{"code":1006,"name":"Saltpeter","qty":2},{"code":1215,"name":"Explosive Runestone","qty":2}]},{"id":"recipe_23301","school":"Fire","name":"Exotic Fire Wall Research Level 65","level":65,"maxUses":4,"ingredients":[{"code":1006,"name":"Saltpeter","qty":2},{"code":1215,"name":"Explosive Runestone","qty":2},{"code":1243,"name":"Flame Nib","qty":2}]},{"id":"recipe_615","school":"Fire","name":"Fire Magic Research Level 65","level":65,"maxUses":5,"ingredients":[{"code":1006,"name":"Saltpeter","qty":2},{"code":1215,"name":"Explosive Runestone","qty":2},{"code":1243,"name":"Flame Nib","qty":2}]},{"id":"recipe_616","school":"Fire","name":"Fire Magic Research Level 70","level":70,"maxUses":7,"ingredients":[{"code":1006,"name":"Saltpeter","qty":2},{"code":1215,"name":"Explosive Runestone","qty":2},{"code":1243,"name":"Flame Nib","qty":2},{"code":1219,"name":"Guano","qty":1}]},{"id":"recipe_23302","school":"Fire","name":"Exotic Fire Wall Research Level 75","level":75,"maxUses":4,"ingredients":[{"code":1339,"name":"Phoenix Feather","qty":1},{"code":1340,"name":"Phoenix Beak","qty":1},{"code":1243,"name":"Flame Nib","qty":1}]},{"id":"recipe_617","school":"Fire","name":"Fire Magic Research Level 75","level":75,"maxUses":7,"ingredients":[{"code":1339,"name":"Phoenix Feather","qty":1},{"code":1340,"name":"Phoenix Beak","qty":1},{"code":1243,"name":"Flame Nib","qty":1}]},{"id":"recipe_618","school":"Fire","name":"Fire Magic Research Level 80","level":80,"maxUses":7,"ingredients":[{"code":1339,"name":"Phoenix Feather","qty":2},{"code":1340,"name":"Phoenix Beak","qty":1},{"code":1341,"name":"Phoenix Egg","qty":1,"chance":0.2}]},{"id":"recipe_23303","school":"Fire","name":"Exotic Fire Wall Research Level 85","level":85,"maxUses":4,"ingredients":[{"code":1339,"name":"Phoenix Feather","qty":2},{"code":1340,"name":"Phoenix Beak","qty":1},{"code":1341,"name":"Phoenix Egg","qty":1,"chance":0.2}]},{"id":"recipe_619","school":"Fire","name":"Fire Magic Research Level 85","level":85,"maxUses":6,"ingredients":[{"code":1339,"name":"Phoenix Feather","qty":2},{"code":1340,"name":"Phoenix Beak","qty":1},{"code":1341,"name":"Phoenix Egg","qty":1,"chance":0.2}]},{"id":"recipe_620","school":"Fire","name":"Fire Magic Research Level 90","level":90,"maxUses":7,"ingredients":[{"code":1339,"name":"Phoenix Feather","qty":2},{"code":1340,"name":"Phoenix Beak","qty":1},{"code":1341,"name":"Phoenix Egg","qty":1,"chance":0.2}]},{"id":"recipe_23304","school":"Fire","name":"Exotic Fire Wall Research Level 95","level":95,"maxUses":4,"ingredients":[{"code":1339,"name":"Phoenix Feather","qty":1},{"code":1435,"name":"Fire Core","qty":1},{"code":1434,"name":"Demonic Giant Snail Shell","qty":1}]},{"id":"recipe_621","school":"Fire","name":"Fire Magic Research Level 95","level":95,"maxUses":7,"ingredients":[{"code":1339,"name":"Phoenix Feather","qty":1},{"code":1435,"name":"Fire Core","qty":1},{"code":1434,"name":"Demonic Giant Snail Shell","qty":1}]},{"id":"recipe_622","school":"Fire","name":"Fire Magic Research Level 100","level":100,"maxUses":7,"ingredients":[{"code":1435,"name":"Fire Core","qty":1},{"code":1434,"name":"Demonic Giant Snail Shell","qty":1},{"code":1460,"name":"Smouldering Demon Heart","qty":1}]},{"id":"recipe_23305","school":"Fire","name":"Exotic Fire Wall Research Level 105","level":105,"maxUses":4,"ingredients":[{"code":1460,"name":"Smouldering Demon Heart","qty":2},{"code":1435,"name":"Fire Core","qty":1},{"code":1455,"name":"Hellblasted Sand","qty":1}]},{"id":"recipe_623","school":"Fire","name":"Fire Magic Research Level 105","level":105,"maxUses":5,"ingredients":[{"code":1460,"name":"Smouldering Demon Heart","qty":2},{"code":1435,"name":"Fire Core","qty":1},{"code":1455,"name":"Hellblasted Sand","qty":1}]},{"id":"recipe_624","school":"Fire","name":"Fire Magic Research Level 110","level":110,"maxUses":8,"ingredients":[{"code":1341,"name":"Phoenix Egg","qty":1},{"code":1460,"name":"Smouldering Demon Heart","qty":1},{"code":1435,"name":"Fire Core","qty":1},{"code":1434,"name":"Demonic Giant Snail Shell","qty":1}]},{"id":"recipe_23306","school":"Fire","name":"Exotic Fire Wall Research Level 115","level":115,"maxUses":4,"ingredients":[{"code":1460,"name":"Smouldering Demon Heart","qty":2},{"code":1435,"name":"Fire Core","qty":2},{"code":1455,"name":"Hellblasted Sand","qty":1},{"code":1434,"name":"Demonic Giant Snail Shell","qty":1}]},{"id":"recipe_625","school":"Fire","name":"Fire Magic Research Level 115","level":115,"maxUses":6,"ingredients":[{"code":1460,"name":"Smouldering Demon Heart","qty":2},{"code":1435,"name":"Fire Core","qty":2},{"code":1455,"name":"Hellblasted Sand","qty":1},{"code":1434,"name":"Demonic Giant Snail Shell","qty":1}]},{"id":"recipe_631","school":"Ice","name":"Ice Magic Research Level 1","level":1,"maxUses":3,"ingredients":[{"code":5001,"name":"Salt","qty":3}]},{"id":"recipe_632","school":"Ice","name":"Ice Magic Research Level 5","level":5,"maxUses":3,"ingredients":[{"code":1153,"name":"Ice Core","qty":1}]},{"id":"recipe_633","school":"Ice","name":"Ice Magic Research Level 10","level":10,"maxUses":5,"ingredients":[{"code":1153,"name":"Ice Core","qty":2}]},{"id":"recipe_634","school":"Ice","name":"Ice Magic Research Level 15","level":15,"maxUses":5,"ingredients":[{"code":1183,"name":"Tundra Lichen","qty":1}]},{"id":"recipe_635","school":"Ice","name":"Ice Magic Research Level 20","level":20,"maxUses":7,"ingredients":[{"code":1183,"name":"Tundra Lichen","qty":2}]},{"id":"recipe_636","school":"Ice","name":"Ice Magic Research Level 25","level":25,"maxUses":6,"ingredients":[{"code":1184,"name":"Orcish Spell Pouch","qty":1}]},{"id":"recipe_637","school":"Ice","name":"Ice Magic Research Level 30","level":30,"maxUses":6,"ingredients":[{"code":1184,"name":"Orcish Spell Pouch","qty":2}]},{"id":"recipe_638","school":"Ice","name":"Ice Magic Research Level 35","level":35,"maxUses":6,"ingredients":[{"code":1153,"name":"Ice Core","qty":2},{"code":1183,"name":"Tundra Lichen","qty":2}]},{"id":"recipe_639","school":"Ice","name":"Ice Magic Research Level 40","level":40,"maxUses":5,"ingredients":[{"code":1183,"name":"Tundra Lichen","qty":2},{"code":1184,"name":"Orcish Spell Pouch","qty":2}]},{"id":"recipe_640","school":"Ice","name":"Ice Magic Research Level 45","level":45,"maxUses":7,"ingredients":[{"code":1153,"name":"Ice Core","qty":1},{"code":1183,"name":"Tundra Lichen","qty":2},{"code":1184,"name":"Orcish Spell Pouch","qty":2}]},{"id":"recipe_641","school":"Ice","name":"Ice Magic Research Level 50","level":50,"maxUses":7,"ingredients":[{"code":1153,"name":"Ice Core","qty":2},{"code":1183,"name":"Tundra Lichen","qty":2},{"code":1184,"name":"Orcish Spell Pouch","qty":2},{"code":5001,"name":"Salt","qty":1}]},{"id":"recipe_642","school":"Ice","name":"Ice Magic Research Level 55","level":55,"maxUses":5,"ingredients":[{"code":1153,"name":"Ice Core","qty":2},{"code":1183,"name":"Tundra Lichen","qty":2},{"code":1244,"name":"Frost Nib","qty":1},{"code":5001,"name":"Salt","qty":1}]},{"id":"recipe_643","school":"Ice","name":"Ice Magic Research Level 60","level":60,"maxUses":8,"ingredients":[{"code":1153,"name":"Ice Core","qty":2},{"code":1183,"name":"Tundra Lichen","qty":2},{"code":1244,"name":"Frost Nib","qty":2},{"code":5001,"name":"Salt","qty":1}]},{"id":"recipe_644","school":"Ice","name":"Ice Magic Research Level 65","level":65,"maxUses":5,"ingredients":[{"code":1183,"name":"Tundra Lichen","qty":2},{"code":1244,"name":"Frost Nib","qty":2},{"code":18183,"name":"Glowy Yellow Crystal","qty":2}]},{"id":"recipe_645","school":"Ice","name":"Ice Magic Research Level 70","level":70,"maxUses":7,"ingredients":[{"code":1183,"name":"Tundra Lichen","qty":2},{"code":1244,"name":"Frost Nib","qty":2},{"code":18183,"name":"Glowy Yellow Crystal","qty":4}]},{"id":"recipe_646","school":"Ice","name":"Ice Magic Research Level 75","level":75,"maxUses":7,"ingredients":[{"code":1342,"name":"Fairy Iceheart","qty":2},{"code":1244,"name":"Frost Nib","qty":2},{"code":18183,"name":"Glowy Yellow Crystal","qty":5}]},{"id":"recipe_647","school":"Ice","name":"Ice Magic Research Level 80","level":80,"maxUses":7,"ingredients":[{"code":1342,"name":"Fairy Iceheart","qty":3},{"code":1244,"name":"Frost Nib","qty":2},{"code":18183,"name":"Glowy Yellow Crystal","qty":6}]},{"id":"recipe_648","school":"Ice","name":"Ice Magic Research Level 85","level":85,"maxUses":6,"ingredients":[{"code":1342,"name":"Fairy Iceheart","qty":3},{"code":1244,"name":"Frost Nib","qty":2},{"code":18183,"name":"Glowy Yellow Crystal","qty":7}]},{"id":"recipe_649","school":"Ice","name":"Ice Magic Research Level 90","level":90,"maxUses":7,"ingredients":[{"code":1342,"name":"Fairy Iceheart","qty":3},{"code":1244,"name":"Frost Nib","qty":2},{"code":18183,"name":"Glowy Yellow Crystal","qty":8}]},{"id":"recipe_650","school":"Ice","name":"Ice Magic Research Level 95","level":95,"maxUses":6,"ingredients":[{"code":1440,"name":"Icy Frog Skin","qty":1},{"code":1449,"name":"Chilling Goblet","qty":1},{"code":1205,"name":"Small Blue Dragon Scale","qty":3}]},{"id":"recipe_651","school":"Ice","name":"Ice Magic Research Level 100","level":100,"maxUses":8,"ingredients":[{"code":1440,"name":"Icy Frog Skin","qty":2},{"code":1449,"name":"Chilling Goblet","qty":2},{"code":1205,"name":"Small Blue Dragon Scale","qty":2}]},{"id":"recipe_652","school":"Ice","name":"Ice Magic Research Level 105","level":105,"maxUses":6,"ingredients":[{"code":18340,"name":"Massive Tsavorite","qty":1},{"code":1244,"name":"Frost Nib","qty":1},{"code":1205,"name":"Small Blue Dragon Scale","qty":1},{"code":1183,"name":"Tundra Lichen","qty":1}]},{"id":"recipe_653","school":"Ice","name":"Ice Magic Research Level 110","level":110,"maxUses":7,"ingredients":[{"code":18340,"name":"Massive Tsavorite","qty":1},{"code":1153,"name":"Ice Core","qty":1},{"code":1205,"name":"Small Blue Dragon Scale","qty":1},{"code":1440,"name":"Icy Frog Skin","qty":1}]},{"id":"recipe_654","school":"Ice","name":"Ice Magic Research Level 115","level":115,"maxUses":6,"ingredients":[{"code":18340,"name":"Massive Tsavorite","qty":2},{"code":1440,"name":"Icy Frog Skin","qty":1},{"code":1449,"name":"Chilling Goblet","qty":1}]}]/*ENDDATA*/;
+
+const LS_PROG = 'gorgon-magicresearch-progress';   // {recipeId: completedCount}
+const LS_IGN  = 'gorgon-magicresearch-ignored';    // {recipeId: true}
+const LS_PRICE= 'gorgon-magicresearch-prices';     // {itemCode: pricePerUnit}
+let progress = load(LS_PROG), ignored = load(LS_IGN), prices = load(LS_PRICE);
+let charItems = null;          // {code: {have, vaults:{vault:qty}}}
+let charName = null;
+let showIgnored = false;
+
+// Items that can't be bought — they're bartered from these sub-ingredients (per 1 nib).
+const BARTER = {
+  1243: {name:'Flame Nib', components:[{code:1223,name:'Tattered Red Book',qty:1},{code:1114,name:'Magic Tooth',qty:2}]},
+  1244: {name:'Frost Nib', components:[{code:1178,name:'Ambient Magic Sponge',qty:2},{code:1224,name:'Faded Blue Book',qty:1}]},
+};
+
+function load(k){ try{return JSON.parse(localStorage.getItem(k))||{}}catch(e){return {}} }
+function save(){
+  localStorage.setItem(LS_PROG,JSON.stringify(progress));
+  localStorage.setItem(LS_IGN,JSON.stringify(ignored));
+  localStorage.setItem(LS_PRICE,JSON.stringify(prices));
+}
+
+function completed(r){ return Math.min(r.maxUses, Math.max(0, progress[r.id]||0)); }
+function remainingUses(r){ return r.maxUses - completed(r); }
+// expected qty needed for a single ingredient across the recipe's remaining uses
+function ingNeed(ing, uses){
+  const per = ing.chance != null ? ing.qty*ing.chance : ing.qty;
+  return Math.ceil(per*uses);
+}
+
+/* ---------- render recipe lists ---------- */
+function render(){
+  const host = document.getElementById('schools');
+  host.innerHTML='';
+  for(const school of ['Fire','Ice']){
+    const list = RECIPES.filter(r=>r.school===school).sort((a,b)=>a.level-b.level);
+    const visible = list.filter(r=>showIgnored || !ignored[r.id]);
+    const div = document.createElement('div');
+    div.className='school '+school.toLowerCase();
+    const doneCount = list.filter(r=>!ignored[r.id] && remainingUses(r)===0).length;
+    const activeCount = list.filter(r=>!ignored[r.id]).length;
+    div.innerHTML = `<h2>${school} Magic Research
+      <span class="cnt">${doneCount}/${activeCount} levels complete</span></h2>`;
+    for(const r of visible) div.appendChild(recipeEl(r));
+    host.appendChild(div);
+  }
+  document.getElementById('showIgnored').textContent =
+    (showIgnored?'Hide ignored (':'Show ignored (')+Object.values(ignored).filter(Boolean).length+')';
+  renderShopping();
+}
+
+function recipeEl(r){
+  const c = completed(r), rem = remainingUses(r);
+  const el = document.createElement('div');
+  el.className='rec'+(ignored[r.id]?' ignored':'')+(rem===0?' done':'');
+  const isExotic = /Exotic/.test(r.name);
+  const shortName = r.name.replace(/ Research.*/,'').replace(/Fire Magic|Ice Magic/,'').trim() || r.name;
+  const ingHtml = r.ingredients.map(ing=>{
+    const need = ingNeed(ing, rem);
+    return `<span class="ing${ing.chance!=null?' chance':''}" title="${ing.qty} per use${ing.chance!=null?' · '+(ing.chance*100)+'% consumed':''}">
+      <span class="q">${ing.qty}×</span>${ing.name}${ing.chance!=null?' <span class="rem">('+(ing.chance*100)+'%)</span>':''}
+      ${rem>0?'<span class="rem">→ need '+need+'</span>':''}</span>`;
+  }).join('');
+  el.innerHTML = `
+    <div class="rec-top">
+      <div class="lvl">Lv<b>${r.level}</b></div>
+      <div class="rname">${r.name}${isExotic?'<span class="exotic">EXOTIC</span>':''}</div>
+      <div class="uses">
+        <div class="stepper">
+          <button data-a="dec">−</button>
+          <span class="val"><b>${c}</b><small>/${r.maxUses}</small></span>
+          <button data-a="inc">+</button>
+          <button data-a="max" title="Mark all done">✓</button>
+        </div>
+      </div>
+      <button class="ig-btn" data-a="ignore">${ignored[r.id]?'unignore':'ignore'}</button>
+    </div>
+    <div class="ings">${ingHtml}</div>`;
+  el.querySelectorAll('button[data-a]').forEach(b=>{
+    b.onclick=()=>{
+      const a=b.dataset.a;
+      if(a==='inc') progress[r.id]=Math.min(r.maxUses,c+1);
+      else if(a==='dec') progress[r.id]=Math.max(0,c-1);
+      else if(a==='max') progress[r.id]=r.maxUses;
+      else if(a==='ignore') ignored[r.id]=!ignored[r.id];
+      save(); render();
+    };
+  });
+  return el;
+}
+
+/* ---------- shopping list ---------- */
+function renderShopping(){
+  // 1. Raw need from every active recipe.
+  const base = {};   // code -> {name, need, chance}
+  for(const r of RECIPES){
+    if(ignored[r.id]) continue;
+    const rem = remainingUses(r);
+    if(rem<=0) continue;
+    for(const ing of r.ingredients){
+      const t = base[ing.code] || (base[ing.code]={name:ing.name, need:0, chance:ing.chance!=null});
+      t.need += ingNeed(ing, rem);
+      if(ing.chance!=null) t.chance=true;
+    }
+  }
+
+  // 2. Expand bartered items (Flame/Frost Nib) into their sub-ingredients.
+  //    Existing nibs in inventory reduce how many must be bartered.
+  const totals = {};   // code -> {name, need, chance, via}
+  const barterNotes = [];
+  function add(code,name,qty,chance,via){
+    const m = totals[code] || (totals[code]={name, need:0, chance:false, via:null});
+    m.need += qty;
+    if(chance) m.chance = true;
+    if(via) m.via = via;
+  }
+  for(const [code,t] of Object.entries(base)){
+    const b = BARTER[code];
+    if(b){
+      const haveNib = charItems ? (charItems[code]?.have||0) : 0;
+      const toBarter = Math.max(0, t.need - haveNib);
+      barterNotes.push({name:t.name, need:t.need, have:haveNib, barter:toBarter});
+      if(toBarter>0) for(const c of b.components) add(c.code, c.name, c.qty*toBarter, false, t.name);
+    } else {
+      add(+code, t.name, t.need, t.chance, null);
+    }
+  }
+
+  const rows = Object.entries(totals).map(([code,t])=>{
+    const ci = charItems ? charItems[code] : null;
+    // With a character loaded, an item you don't own means 0 — not "unknown".
+    const have = charItems ? (ci ? ci.have : 0) : null;
+    return {code:+code, name:t.name, need:t.need, chance:t.chance, via:t.via, have, vaults: ci?ci.vaults:null};
+  }).sort((a,b)=> a.name.localeCompare(b.name));
+
+  const host = document.getElementById('shopping');
+  const tag = document.getElementById('shopTag');
+  if(rows.length===0){ host.innerHTML='<div class="empty">Nothing needed — all active levels complete. 🎉</div>'; tag.textContent=''; return; }
+
+  const totalShort = rows.reduce((s,r)=> s + (r.have!=null?Math.max(0,r.need-r.have):r.need),0);
+  tag.textContent = charItems ? (totalShort>0? totalShort+' still to buy' : 'fully stocked') : rows.length+' items';
+
+  const nCols = 2 + (charItems?2:0) + 2;  // name,need[,have,short],price,cost
+  let html = `<table><thead><tr><th>Ingredient</th><th class="num">Need</th>`
+    + (charItems?'<th class="num">Have</th><th class="num">Short</th>':'')
+    + `<th class="num">Price ea</th><th class="num">Cost</th></tr></thead><tbody>`;
+  let grand = 0;
+  for(const r of rows){
+    const short = r.have!=null ? Math.max(0, r.need-r.have) : null;
+    const toBuy = charItems ? short : r.need;      // qty you still have to acquire
+    const price = prices[r.code];
+    const cost = (price!=null && !isNaN(price)) ? price*toBuy : null;
+    if(cost!=null) grand += cost;
+    const okRow = short===0;
+    html += `<tr class="${okRow?'ok-row':''}">
+      <td>${r.name}${r.chance?' <span class="rem" title="chance-to-consume — expected amount">*</span>':''}${r.via?` <span class="via" title="bartered, not bought">⇄ ${r.via}</span>`:''}</td>
+      <td class="num need">${r.need}</td>`;
+    if(charItems){
+      html += `<td class="num ${r.have>0?'have':''}">${r.have??0}</td>
+        <td class="num ${short>0?'short':'have'}">${short>0?short:'✓'}</td>`;
+    }
+    html += `<td class="num"><input class="price" type="number" min="0" step="1" inputmode="numeric"
+        data-code="${r.code}" data-buy="${toBuy}" value="${price!=null?price:''}" placeholder="—"></td>
+      <td class="num cost" id="cost-${r.code}">${cost!=null?fmt(cost):''}</td>
+    </tr>`;
+    if(charItems && r.vaults && Object.keys(r.vaults).length){
+      const where = Object.entries(r.vaults).sort((a,b)=>b[1]-a[1])
+        .map(([v,q])=>`${prettyVault(v)}: ${q}`).join(' · ');
+      html += `<tr class="whererow"><td colspan="${nCols}" class="where">↳ ${where}</td></tr>`;
+    }
+  }
+  html += `<tr class="totalrow"><td>Estimated remaining</td>`
+    + `<td class="num" colspan="${nCols-2}"></td>`
+    + `<td class="num" id="grandTotal">${fmt(grand)}</td></tr>`;
+  html += `</tbody></table>`;
+  if(barterNotes.length){
+    const txt = barterNotes.map(n=>`${n.barter>0?n.barter:'0'}× ${n.name}`
+      + (n.have>0?` (have ${n.have})`:'')).join(' · ');
+    html += `<div class="barter-note">⇄ Barter needed: ${txt}</div>`;
+  }
+  host.innerHTML = html;
+
+  // Live price editing without a full re-render (keeps input focus).
+  host.querySelectorAll('input.price').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      const code = inp.dataset.code, buy = +inp.dataset.buy;
+      const v = inp.value.trim();
+      if(v==='') delete prices[code]; else prices[code] = +v;
+      save();
+      const p = prices[code];
+      const cost = (p!=null && !isNaN(p)) ? p*buy : null;
+      document.getElementById('cost-'+code).textContent = cost!=null?fmt(cost):'';
+      let g=0; host.querySelectorAll('input.price').forEach(i=>{
+        const pp=prices[i.dataset.code]; if(pp!=null&&!isNaN(pp)) g+=pp*(+i.dataset.buy);
+      });
+      document.getElementById('grandTotal').textContent = fmt(g);
+    });
+  });
+}
+
+function fmt(n){ return Math.round(n).toLocaleString(); }
+
+function prettyVault(v){
+  return v.replace(/Vault$/,'').replace(/([a-z])([A-Z])/g,'$1 $2')
+          .replace(/^Main$/,'Inventory').trim() || v;
+}
+
+/* ---------- character items ---------- */
+// Turn a parsed items-export object into our {code:{have,vaults}} map and refresh the UI.
+function applyItemsData(data, fallbackName){
+  const items = data.Items || data.items || (Array.isArray(data)?data:[]);
+  const map = {};
+  for(const it of items){
+    const code = it.TypeID ?? it.TypeId ?? it.typeId;
+    if(code==null) continue;
+    const qty = it.StackSize ?? it.Quantity ?? 1;
+    const vault = it.StorageVault || 'Unknown';
+    const m = map[code] || (map[code]={have:0, vaults:{}});
+    m.have += qty;
+    m.vaults[vault] = (m.vaults[vault]||0) + qty;
+  }
+  charItems = map;
+  charName = data.Character || data.CharacterName || fallbackName || 'Character';
+  const pill = document.getElementById('charPill');
+  pill.textContent = charName+' — '+Object.keys(map).length+' item types';
+  pill.classList.add('on');
+  render();
+}
+
+document.getElementById('itemsFile').onchange = async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  stopWatching();  // manual load takes over from folder watch
+  try{ applyItemsData(JSON.parse(await f.text()), f.name.split(/[_.]/)[0]); }
+  catch(err){ alert('Could not read items file: '+err.message); }
+};
+
+/* ---------- folder watching (shares index.html's saved handle) ---------- */
+// IndexedDB: same DB/store/key that index.html uses, so the Reports folder
+// only has to be picked once across the whole tool suite.
+function openHandlesDB(){
+  return new Promise((res,rej)=>{
+    const req = indexedDB.open('GorgonTrackerDB',1);
+    req.onupgradeneeded = e=> e.target.result.createObjectStore('handles');
+    req.onsuccess = e=> res(e.target.result);
+    req.onerror = e=> rej(e.target.error);
+  });
+}
+async function saveDirHandle(h){ try{ const db=await openHandlesDB(); const tx=db.transaction('handles','readwrite'); tx.objectStore('handles').put(h,'reportsDir'); await new Promise(r=>tx.oncomplete=r);}catch(e){} }
+async function getSavedDirHandle(){ try{ const db=await openHandlesDB(); return await new Promise(res=>{ const r=db.transaction('handles','readonly').objectStore('handles').get('reportsDir'); r.onsuccess=e=>res(e.target.result||null); r.onerror=()=>res(null);});}catch(e){return null;} }
+
+// Mirror of index.html: the picked folder may be Reports itself, its parent, or hold Character_*.json.
+async function resolveReportsDir(dir){
+  for await (const [name,h] of dir.entries()){
+    if(h.kind==='file' && name.startsWith('Character_') && name.endsWith('.json')) return dir;
+  }
+  try{ return await dir.getDirectoryHandle('Reports'); }
+  catch(_){ return dir; }  // fall back to the folder as-is
+}
+// Newest *_items_*.json by filename — the timestamp suffix sorts lexically.
+async function findLatestItems(reportsDir){
+  let latest=null, latestName='';
+  for await (const [name,h] of reportsDir.entries()){
+    if(h.kind==='file' && name.endsWith('.json') && name.includes('_items_') && name>latestName){
+      latestName=name; latest=h;
+    }
+  }
+  return latest ? {handle:latest, name:latestName} : null;
+}
+
+let watchTimer=null, watchDir=null, lastItemsName=null;
+
+async function loadLatestFromDir(reportsDir, {force=false}={}){
+  const found = await findLatestItems(reportsDir);
+  if(!found){ setWatchPill('no items export found', true); return; }
+  if(!force && found.name===lastItemsName) return;  // nothing new
+  lastItemsName = found.name;
+  const file = await found.handle.getFile();
+  applyItemsData(JSON.parse(await file.text()), found.name.split(/[_.]/)[0]);
+  setWatchPill('watching · '+found.name.replace(/^.*_items_/,'').replace(/\.json$/,''));
+}
+
+function setWatchPill(txt, warn){
+  const p=document.getElementById('watchPill');
+  p.style.display=''; p.textContent=txt;
+  p.classList.toggle('on', !warn);
+}
+
+async function ensurePermission(dir, interactive){
+  if(!dir.queryPermission) return true;
+  if(await dir.queryPermission({mode:'read'})==='granted') return true;
+  if(interactive && await dir.requestPermission({mode:'read'})==='granted') return true;
+  return false;
+}
+
+async function startWatching(dir){
+  watchDir = dir;
+  const reportsDir = await resolveReportsDir(dir);
+  await loadLatestFromDir(reportsDir, {force:true});
+  document.getElementById('watchBtn').textContent='✓ Watching Folder';
+  clearInterval(watchTimer);
+  watchTimer = setInterval(async ()=>{
+    try{
+      if(!(await ensurePermission(dir,false))) return;
+      await loadLatestFromDir(await resolveReportsDir(dir));
+    }catch(e){/* transient */}
+  }, 5000);
+}
+
+function stopWatching(){
+  clearInterval(watchTimer); watchTimer=null; watchDir=null;
+  document.getElementById('watchBtn').textContent='Watch Reports Folder';
+}
+
+document.getElementById('watchBtn').onclick = async ()=>{
+  try{
+    let dir = await getSavedDirHandle();
+    // If nothing saved (or permission denied), let the user pick the folder now.
+    if(!dir || !(await ensurePermission(dir,true))){
+      dir = await window.showDirectoryPicker({id:'gorgon-reports', mode:'read'});
+    }
+    if(!(await ensurePermission(dir,true))){ setWatchPill('permission denied', true); return; }
+    await saveDirHandle(dir);
+    await startWatching(dir);
+  }catch(e){
+    if(e.name!=='AbortError') setWatchPill('error: '+e.message, true);
+  }
+};
+
+// Refresh immediately when you tab back after exporting in-game.
+window.addEventListener('focus', ()=>{
+  if(watchDir) resolveReportsDir(watchDir).then(rd=>loadLatestFromDir(rd)).catch(()=>{});
+});
+
+// On load, silently reuse the shared handle if permission was already granted.
+(async ()=>{
+  if(typeof window.showDirectoryPicker!=='function'){   // Firefox/Safari: manual load only
+    const b=document.getElementById('watchBtn');
+    b.disabled=true; b.title='Folder watching needs Chrome or Edge'; b.textContent='Watch (Chrome/Edge only)';
+    return;
+  }
+  const dir = await getSavedDirHandle();
+  if(dir && await ensurePermission(dir,false)){
+    try{ await startWatching(dir); }catch(e){}
+  }
+})();
+
+document.getElementById('showIgnored').onclick = ()=>{ showIgnored=!showIgnored; render(); };
+document.getElementById('resetBtn').onclick = ()=>{
+  if(confirm('Clear all completion counts and ignores? (Character items stay loaded.)')){
+    progress={}; ignored={}; save(); render();
+  }
+};
+
+render();
+</script>
+</body>
+</html>
