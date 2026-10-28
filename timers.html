@@ -590,7 +590,7 @@
             this.loadSettings();
             this.fetchAreas();
             this.startTick();
-            this.cdnBaseUrl = 'https://cdn.projectgorgon.com/v459/data/';
+            this.cdnBaseUrl = 'https://cdn.projectgorgon.com/v490/data/';
             this._cdnVersionResolved = false;
         }
 
@@ -658,7 +658,8 @@
             this._cdnVersionResolved = true; // mark early to avoid concurrent calls
             try {
                 const res = await fetch('https://cdn.projectgorgon.com/', { redirect: 'follow' });
-                const match = res.url.match(/\/(v\d+)\//);
+                // The root used to HTTP-redirect; it now serves a meta-refresh page, so check the body too
+                const match = res.url.match(/\/(v\d+)\//) || (await res.text()).match(/\/(v\d+)\/data\//);
                 if (match) {
                     this.cdnBaseUrl = `https://cdn.projectgorgon.com/${match[1]}/data/`;
                     console.log('[CDN] Auto-detected version:', match[1], '→', this.cdnBaseUrl);

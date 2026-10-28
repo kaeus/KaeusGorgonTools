@@ -648,9 +648,18 @@
 
             async loadGameData() {
                 try {
+                    // The CDN only serves its latest version, so detect it from the root's meta-refresh page
+                    let cdnBaseUrl = 'https://cdn.projectgorgon.com/v490/data/';
+                    try {
+                        const res = await fetch('https://cdn.projectgorgon.com/', { redirect: 'follow' });
+                        const match = res.url.match(/\/(v\d+)\//) || (await res.text()).match(/\/(v\d+)\/data\//);
+                        if (match) cdnBaseUrl = `https://cdn.projectgorgon.com/${match[1]}/data/`;
+                    } catch (e) {
+                        console.warn('[CDN] Could not auto-detect version, using fallback:', cdnBaseUrl, e);
+                    }
                     const [landmarks, npcs] = await Promise.all([
-                        fetch('https://cdn.projectgorgon.com/v457/data/landmarks.json').then(r => r.json()),
-                        fetch('https://cdn.projectgorgon.com/v457/data/npcs.json').then(r => r.json())
+                        fetch(cdnBaseUrl + 'landmarks.json').then(r => r.json()),
+                        fetch(cdnBaseUrl + 'npcs.json').then(r => r.json())
                     ]);
 
                     this.landmarksData = landmarks;
